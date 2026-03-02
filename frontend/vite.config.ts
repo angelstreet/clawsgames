@@ -15,6 +15,11 @@ export default defineConfig({
         target: 'http://localhost:5010',
         changeOrigin: true,
       },
+      '/clawsgames/api': {
+        target: 'http://localhost:5010',
+        rewrite: (path: string) => path.replace('/clawsgames/api', '/api'),
+        changeOrigin: true,
+      },
     },
   },
 });
