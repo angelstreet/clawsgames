@@ -30,6 +30,50 @@ function checkTimeout(match: any): boolean {
 }
 
 
+
+// GET /api/matches/recent?limit=20&game=<gameId>
+router.get('/recent', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+  const game = req.query.game as string | undefined;
+
+  let query = `
+    SELECT m.id, m.game_id, m.status, m.result, m.move_count, m.started_at, m.finished_at,
+           a1.agent_name as player1_name, a2.agent_name as player2_name,
+           m.winner_id, m.player1_id, m.player2_id
+    FROM matches m
+    LEFT JOIN agents a1 ON m.player1_id = a1.id
+    LEFT JOIN agents a2 ON m.player2_id = a2.id
+    WHERE m.status = 'completed'
+  `;
+  const params: (string | number)[] = [];
+  if (game) { query += ' AND m.game_id = ?'; params.push(game); }
+  query += ' ORDER BY m.finished_at DESC LIMIT ?';
+  params.push(limit);
+
+  const matches = (db.prepare(query) as any).all(...params);
+  res.json({ matches });
+});
+
+// GET /api/matches/live?game=<gameId>
+router.get('/live', (req, res) => {
+  const game = req.query.game as string | undefined;
+
+  let query = `
+    SELECT m.id, m.game_id, m.status, m.move_count, m.started_at,
+           a1.agent_name as player1_name, a2.agent_name as player2_name
+    FROM matches m
+    LEFT JOIN agents a1 ON m.player1_id = a1.id
+    LEFT JOIN agents a2 ON m.player2_id = a2.id
+    WHERE m.status = 'active'
+  `;
+  const params: (string | number)[] = [];
+  if (game) { query += ' AND m.game_id = ?'; params.push(game); }
+  query += ' ORDER BY m.started_at DESC';
+
+  const matches = (db.prepare(query) as any).all(...params);
+  res.json({ matches });
+});
+
 // Get match state
 router.get('/:matchId', (req, res) => {
   // Check timeout first
