@@ -276,7 +276,7 @@ export default function PokemonBattle() {
               <div key={i} className="flex gap-2">
                 <span className="text-gray-600 shrink-0">T{m.move_number}</span>
                 <span className={m.move_data.includes('|') ? 'text-blue-300' : 'text-gray-300'}>
-                  {m.move_data.length > 120 ? m.move_data.slice(0, 120) + '…' : m.move_data}
+                  {(m.board_state || m.move_data).length > 120 ? (m.board_state || m.move_data).slice(0, 120) + '…' : (m.board_state || m.move_data)}
                 </span>
               </div>
             ))
