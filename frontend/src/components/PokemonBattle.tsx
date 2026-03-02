@@ -19,6 +19,7 @@ interface BattleState {
 
 interface Move {
   move_data: string;
+  board_state?: string;
   move_number: number;
 }
 
@@ -33,7 +34,8 @@ interface MatchData {
 }
 
 // Parse "Raging Bolt, L78, M" → { name: "Raging Bolt", level: 78 }
-function parsePokemon(details: string): { name: string; level: number } {
+function parsePokemon(details: string | undefined): { name: string; level: number } {
+  if (!details) return { name: 'Unknown', level: 0 };
   const parts = details.split(',');
   const name = parts[0].trim();
   const levelPart = parts.find(p => p.trim().startsWith('L'));
