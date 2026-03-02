@@ -76,11 +76,17 @@ db.exec(`
 
   -- Seed games
   INSERT OR IGNORE INTO games (id, name, description, turn_timeout_sec) VALUES
-  db.exec("UPDATE games SET max_turns = 50 WHERE id = 'pokemon'");
     ('tictactoe', 'Tic-Tac-Toe', 'Classic 3x3 grid. Get three in a row to win.', 15),
     ('chess', 'Chess', 'Standard chess. Checkmate your opponent.', 60),
     ('pokemon', 'Pokemon Battle', 'Gen 9 Random Battle. 50 turn limit - most HP wins!', 120);
 `);
 
-db.exec("UPDATE games SET max_turns = 50 WHERE id = 'pokemon'");
 export default db;
+
+// Migration: add max_turns column if missing
+try {
+  db.exec("ALTER TABLE games ADD COLUMN max_turns INTEGER DEFAULT 0");
+} catch (e: any) {
+  // Column already exists
+}
+db.exec("UPDATE games SET max_turns = 50 WHERE id = 'pokemon'");
