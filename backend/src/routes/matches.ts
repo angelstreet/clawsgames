@@ -1,3 +1,4 @@
+import { reportToRoC } from '../services/roc.js';
 import { Router } from 'express';
 import db from '../db/index.js';
 import { authMiddleware, AuthedRequest } from '../middleware/auth.js';
@@ -7,8 +8,34 @@ import type { Response } from 'express';
 
 const router = Router();
 
+// Check and enforce turn timeout
+function checkTimeout(match: any): boolean {
+  if (match.status !== 'active') return false;
+  const game = db.prepare('SELECT turn_timeout_sec FROM games WHERE id = ?').get(match.game_id) as any;
+  if (!game) return false;
+  
+  const lastMove = db.prepare('SELECT created_at FROM moves WHERE match_id = ? ORDER BY move_number DESC LIMIT 1').get(match.id) as any;
+  const lastTime = lastMove ? new Date(lastMove.created_at + 'Z').getTime() : new Date(match.started_at + 'Z').getTime();
+  const elapsed = (Date.now() - lastTime) / 1000;
+  
+  if (elapsed > game.turn_timeout_sec) {
+    // Current player forfeits
+    const loserId = match.current_turn === 1 ? match.player1_id : match.player2_id;
+    const winnerId = match.current_turn === 1 ? match.player2_id : match.player1_id;
+    db.prepare("UPDATE matches SET status = 'completed', winner_id = ?, result = 'timeout', finished_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(winnerId, match.id);
+    return true;
+  }
+  return false;
+}
+
+
 // Get match state
 router.get('/:matchId', (req, res) => {
+  // Check timeout first
+  const rawMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  if (rawMatch) checkTimeout(rawMatch);
+  
   const match = db.prepare(`
     SELECT m.*, a1.agent_name as player1_name, a2.agent_name as player2_name,
            a1.gateway_id as player1_gw, a2.gateway_id as player2_gw

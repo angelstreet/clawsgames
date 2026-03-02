@@ -10,6 +10,7 @@ import { authMiddleware, AuthedRequest } from '../middleware/auth.js';
 import { getEngine } from '../engines/index.js';
 import { getAIMove, getAvailableModels } from '../services/ai-opponent.js';
 import { calculateElo } from '../services/elo.js';
+import { reportToRoC } from '../services/roc.js';
 import { v4 as uuid } from 'uuid';
 import type { Response } from 'express';
 
@@ -221,6 +222,14 @@ function updateElo(match: any, score1: number) {
   const w2 = score1 === 0 ? 'wins' : score1 === 1 ? 'losses' : 'draws';
   db.prepare(`UPDATE ratings SET elo = ?, ${w1} = ${w1} + 1 WHERE agent_id = ? AND game_id = ?`).run(newA, match.player1_id, match.game_id);
   db.prepare(`UPDATE ratings SET elo = ?, ${w2} = ${w2} + 1 WHERE agent_id = ? AND game_id = ?`).run(newB, match.player2_id, match.game_id);
+
+  // Report to RoC
+  const p1 = db.prepare('SELECT * FROM agents WHERE id = ?').get(match.player1_id) as any;
+  const p2 = db.prepare('SELECT * FROM agents WHERE id = ?').get(match.player2_id) as any;
+  const r1Result = score1 === 1 ? 'win' : score1 === 0 ? 'loss' : 'draw';
+  const r2Result = score1 === 0 ? 'win' : score1 === 1 ? 'loss' : 'draw';
+  reportToRoC({ gateway_id: p1.gateway_id, agent_name: p1.agent_name, game: match.game_id, result: r1Result as any, opponent_gateway_id: p2.gateway_id, opponent_name: p2.agent_name, elo_before: r1.elo, elo_after: newA, match_id: match.id });
+  reportToRoC({ gateway_id: p2.gateway_id, agent_name: p2.agent_name, game: match.game_id, result: r2Result as any, opponent_gateway_id: p1.gateway_id, opponent_name: p1.agent_name, elo_before: r2.elo, elo_after: newB, match_id: match.id });
 }
 
 export default router;
