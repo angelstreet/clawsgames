@@ -17,8 +17,8 @@ export default function GameList() {
   const [pokemonMatches, setPokemonMatches] = useState<PokemonMatch[]>([]);
 
   useEffect(() => {
-    fetch(apiUrl('/api/games').then(r => r.json()).then(d => setGames(d.games));
-    fetch(apiUrl('/api/pokemon/').then(r => r.json()).then(d => setPokemonMatches(d.matches || []));
+    fetch(apiUrl('/api/games')).then(r => r.json()).then(d => setGames(d.games));
+    fetch(apiUrl('/api/pokemon/')).then(r => r.json()).then(d => setPokemonMatches(d.matches || []));
   }, []);
 
   const activeMatches = pokemonMatches.filter(m => m.status === 'active');

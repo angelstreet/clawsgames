@@ -11,7 +11,7 @@ export default function MatchView() {
 
   useEffect(() => {
     if (!matchId) return;
-    fetch(apiUrl(`/api/matches/${matchId}`).then(r => r.json()).then(d => {
+    fetch(apiUrl(`/api/matches/${matchId}`)).then(r => r.json()).then(d => {
       setMatch(d);
       setGameId(d.game_id);
     });

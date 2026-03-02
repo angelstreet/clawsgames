@@ -161,7 +161,7 @@ export default function PokemonBattle() {
   useEffect(() => {
     if (!matchId) return;
     const load = () =>
-      fetch(apiUrl(`/api/pokemon/${matchId}`)
+      fetch(apiUrl(`/api/pokemon/${matchId}`))
         .then(r => r.json())
         .then(d => { setMatch(d); setLoading(false); });
     load();
