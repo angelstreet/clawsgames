@@ -55,6 +55,12 @@ export async function getAIMove(
     const moves = moveHistory.length > 0 ? `Moves: ${moveHistory.join(' ')}` : 'Game start.';
     systemPrompt = `You are playing Chess as ${color}. Respond with ONLY your move in SAN (e.g. e4, Nf3, O-O). No explanation.`;
     userPrompt = `${moves}\n\n${boardDisplay}\n\nYour move:`;
+  } else if (gameId === 'pokemon') {
+    systemPrompt = `You are in a Pokemon battle as Player ${playerNumber}. Choose your action. Respond with ONLY one of:
+- "move 1" through "move 4" to use an attack
+- "switch 2" through "switch 6" to switch Pokemon
+Respond with ONLY the command, nothing else.`;
+    userPrompt = boardDisplay + '\nYour action:';
   } else {
     return { move: '0', model_used: 'fallback', fallback: true };
   }
@@ -110,6 +116,6 @@ export async function getAIMove(
     }
   }
 
-  const move = gameId === 'tictactoe' ? fallbackMoveTictactoe(boardState) : fallbackMoveChess();
+  const move = gameId === 'tictactoe' ? fallbackMoveTictactoe(boardState) : gameId === 'pokemon' ? 'move 1' : fallbackMoveChess();
   return { move, model_used: 'fallback-logic', fallback: true };
 }

@@ -76,7 +76,8 @@ db.exec(`
   -- Seed games
   INSERT OR IGNORE INTO games (id, name, description, turn_timeout_sec) VALUES
     ('tictactoe', 'Tic-Tac-Toe', 'Classic 3x3 grid. Get three in a row to win.', 15),
-    ('chess', 'Chess', 'Standard chess. Checkmate your opponent.', 60);
+    ('chess', 'Chess', 'Standard chess. Checkmate your opponent.', 60),
+    ('pokemon', 'Pokemon Battle', 'Gen 9 Random Battle. Assemble your team and fight!', 120);
 `);
 
 export default db;

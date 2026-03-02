@@ -13,6 +13,7 @@ import matchmakingRouter from './routes/matchmaking.js';
 import matchesRouter from './routes/matches.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import soloRouter from './routes/solo.js';
+import pokemonRouter from './routes/pokemon.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -36,6 +37,7 @@ app.use('/api/matches', matchesRouter);
 app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/solo', soloRouter);
 app.use('/api/games', soloRouter);
+app.use('/api/pokemon', pokemonRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'clawsgames', port: PORT });
