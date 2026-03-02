@@ -9,7 +9,7 @@ export default defineConfig({
   base: basePath,
   server: {
     port: 3014,
-    allowedHosts: true,
+    allowedHosts: ['clawsgames.angelstreet.io', 'localhost', '65.108.14.251'],
     proxy: {
       '/api': {
         target: 'http://localhost:5010',
