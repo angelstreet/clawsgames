@@ -25,7 +25,7 @@ router.post('/solo', authMiddleware, async (req: AuthedRequest, res: Response) =
   const { p1View } = await createBattle(matchId);
 
   res.json({ match_id: matchId, game_id: 'pokemon', opponent: modelName, battle_view: p1View, your_turn: true,
-    instructions: 'Use "move 1-4" to attack or "switch 1-6" to switch Pokemon.' });
+    instructions: 'Use "move 1-4" to attack or "switch 1-6" to switch Pokemon. Max 50 turns - if no winner, most remaining HP% wins.' });
 });
 
 router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Response) => {

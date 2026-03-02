@@ -26,6 +26,7 @@ db.exec(`
     min_players INTEGER DEFAULT 2,
     max_players INTEGER DEFAULT 2,
     turn_timeout_sec INTEGER DEFAULT 30,
+    max_turns INTEGER DEFAULT 0,
     enabled INTEGER DEFAULT 1
   );
 
@@ -75,9 +76,10 @@ db.exec(`
 
   -- Seed games
   INSERT OR IGNORE INTO games (id, name, description, turn_timeout_sec) VALUES
+  db.exec("UPDATE games SET max_turns = 50 WHERE id = 'pokemon'");
     ('tictactoe', 'Tic-Tac-Toe', 'Classic 3x3 grid. Get three in a row to win.', 15),
     ('chess', 'Chess', 'Standard chess. Checkmate your opponent.', 60),
-    ('pokemon', 'Pokemon Battle', 'Gen 9 Random Battle. Assemble your team and fight!', 120);
+    ('pokemon', 'Pokemon Battle', 'Gen 9 Random Battle. 50 turn limit - most HP wins!', 120);
 `);
 
 export default db;
