@@ -1,5 +1,4 @@
 import { apiUrl } from '../lib/api';
-import { apiUrl } from '../lib/api';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Match } from '../types';

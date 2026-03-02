@@ -1,5 +1,4 @@
 import { apiUrl } from '../lib/api';
-import { apiUrl } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 
