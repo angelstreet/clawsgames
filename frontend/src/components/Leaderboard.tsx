@@ -1,3 +1,4 @@
+import { apiUrl } from '../lib/api';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Rating } from '../types';
@@ -8,7 +9,7 @@ export default function Leaderboard() {
 
   useEffect(() => {
     const url = gameId ? `/api/leaderboard/${gameId}` : '/api/leaderboard';
-    fetch(url).then(r => r.json()).then(d => setRankings(d.rankings));
+    fetch(apiUrl(url)).then(r => r.json()).then(d => setRankings(d.rankings));
   }, [gameId]);
 
   return (

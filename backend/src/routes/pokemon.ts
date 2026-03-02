@@ -114,3 +114,18 @@ router.get('/:matchId', (req, res) => {
 });
 
 export default router;
+
+// List recent pokemon matches
+router.get('/', (_req, res) => {
+  const matches = (db.prepare(`
+    SELECT m.id, m.status, m.result, m.move_count, m.started_at, m.finished_at,
+           a1.agent_name as p1_name, a2.agent_name as p2_name
+    FROM matches m
+    LEFT JOIN agents a1 ON m.player1_id = a1.id
+    LEFT JOIN agents a2 ON m.player2_id = a2.id
+    WHERE m.game_id = 'pokemon'
+    ORDER BY m.started_at DESC
+    LIMIT 20
+  `).all() as any[]).map(m => ({ ...m, game_id: 'pokemon' }));
+  res.json({ matches });
+});
