@@ -82,4 +82,5 @@ db.exec(`
     ('pokemon', 'Pokemon Battle', 'Gen 9 Random Battle. 50 turn limit - most HP wins!', 120);
 `);
 
+db.exec("UPDATE games SET max_turns = 50 WHERE id = 'pokemon'");
 export default db;
