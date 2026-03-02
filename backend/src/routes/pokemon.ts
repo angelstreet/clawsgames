@@ -70,9 +70,9 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   const result = await playTurn(req.params.matchId, playerMove, aiCommand);
   if (!result.valid) { res.status(400).json({ error: result.error }); return; }
 
-  // Record moves
+  // Record moves with battle log
   db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
-    .run(req.params.matchId, match.player1_id, result.turn, playerMove, '');
+    .run(req.params.matchId, match.player1_id, result.turn, playerMove, result.battleLog || '');
   db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
     .run(req.params.matchId, match.player2_id, result.turn, aiCommand, '');
 
