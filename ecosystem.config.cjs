@@ -5,7 +5,11 @@ module.exports = {
       cwd: './backend',
       script: 'node_modules/.bin/tsx',
       args: 'src/index.ts',
-      env: { PORT: 5010 },
+      env_file: '.env',
+      env: {
+        PORT: 5010,
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
+      },
     },
     {
       name: 'clawsgames-ui',
