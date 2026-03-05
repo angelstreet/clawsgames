@@ -218,6 +218,8 @@ export default function PokemonBattle() {
     navigate('/', { replace: true });
   };
 
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (!matchId) return;
     const load = () =>
@@ -227,10 +229,17 @@ export default function PokemonBattle() {
           setMatch(d);
           if (d?.battle) setLastBattle(d.battle);
           setLoading(false);
+          // Stop polling once the match is completed
+          if (d?.status === 'completed' && intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
         });
     load();
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
+    intervalRef.current = setInterval(load, 3000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [matchId]);
 
   const safeMoves = match?.moves || [];
@@ -331,7 +340,7 @@ export default function PokemonBattle() {
             {winnerName ? `Winner: ${winnerName}` : 'Battle Ended'}
           </div>
           <div className="text-xs text-yellow-100/80 mt-1 text-center">
-            {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? 'Win by timeout' : 'Completed'} · Duration {duration}
+            {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? (winnerName ? 'Win by timeout' : 'Timeout') : 'Completed'} · Duration {duration}
           </div>
         </div>
       )}
@@ -385,7 +394,7 @@ export default function PokemonBattle() {
                 {winnerName ? `Winner: ${winnerName}` : 'Battle completed'}
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? 'Win by timeout' : 'Completed'} · Duration {duration}
+                {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? (winnerName ? 'Win by timeout' : 'Timeout') : 'Completed'} · Duration {duration}
               </div>
             </>
           ) : (

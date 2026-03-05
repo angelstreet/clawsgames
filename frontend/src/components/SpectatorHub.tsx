@@ -107,6 +107,11 @@ export default function SpectatorHub() {
   }, [filterGame, recentWindow, agentSearch]);
 
   function getResultDisplay(match: RecentMatch) {
+    // Handle timeout first — show TIMEOUT regardless of whether there's a winner_id
+    if (match.result === 'timeout') {
+      return { text: 'TIMEOUT', color: 'text-orange-400' };
+    }
+
     if (!match.result || match.result === 'draw') {
       return { text: 'DRAW', color: 'text-yellow-400' };
     }
@@ -119,10 +124,7 @@ export default function SpectatorHub() {
           : null;
 
     if (winnerName) {
-      return {
-        text: match.result === 'timeout' ? 'TIMEOUT' : 'WIN',
-        color: match.result === 'timeout' ? 'text-orange-400' : 'text-green-400',
-      };
+      return { text: 'WIN', color: 'text-green-400' };
     }
 
     return { text: '-', color: 'text-gray-500' };
@@ -239,7 +241,7 @@ export default function SpectatorHub() {
               const result = getResultDisplay(m);
               const p1Won = m.winner_id === m.player1_id;
               const p2Won = m.winner_id === m.player2_id;
-              const isDraw = !m.result || m.result === 'draw' || (!p1Won && !p2Won);
+              const isDraw = !m.result || m.result === 'draw';
               return (
                 <Link
                   key={m.id}
