@@ -91,15 +91,44 @@ function formatDuration(startedAt?: string, finishedAt?: string | null): string 
 }
 
 function readableEvent(line: string, p1: string, p2: string): string {
-  return line
-    .replace(/^move p1a:\s*/i, `${p1}: `)
-    .replace(/^move p2a:\s*/i, `${p2}: `)
-    .replace(/^switch p1a:\s*/i, `${p1}: switched to `)
-    .replace(/^switch p2a:\s*/i, `${p2}: switched to `)
-    .replace(/^faint p1a:\s*/i, `${p1}: fainted `)
-    .replace(/^faint p2a:\s*/i, `${p2}: fainted `)
+  let result = line
+    .replace(/^move p1a:/i, `${p1} used`)
+    .replace(/^move p2a:/i, `${p2} used`)
+    .replace(/^switch p1a:/i, `${p1} switched to`)
+    .replace(/^switch p2a:/i, `${p2} switched to`)
+    .replace(/^faint p1a:/i, `${p1}'s`)
+    .replace(/^faint p2a:/i, `${p2}'s`)
+    .replace(/-damage\|\s*p\d[a-z]*:/gi, (match) => {
+      const player = match.includes('p1') ? p1 : p2;
+      return `${player}'s`;
+    })
+    .replace(/-heal\|\s*p\d[a-z]*:/gi, (match) => {
+      const player = match.includes('p1') ? p1 : p2;
+      return `${player} recovered`;
+    })
+    .replace(/-supereffective\|/gi, 'It\'s super effective! ')
+    .replace(/-resisted\|/gi, 'It\'s not very effective... ')
+    .replace(/-crit\|/gi, 'Critical hit! ')
+    .replace(/-miss\|/gi, 'missed! ')
     .replace(/^win\s+/i, 'Winner: ')
     .trim();
+  
+  // Format damage: "p1a: Charizard 100/100" -> "Charizard took damage (100/100)"
+  if (result.includes('|')) {
+    const parts = result.split('|').filter(p => p.trim());
+    if (parts.length >= 2) {
+      // Extract Pokemon name from position
+      const pokemon = parts[0].replace(/^p\d[a-z]*:/i, '').trim() || '';
+      const condition = parts[parts.length - 1].trim();
+      if (condition && /^\d+\/\d+$/.test(condition)) {
+        result = `${pokemon} [${condition}]`;
+      } else if (condition) {
+        result = `${pokemon} ${condition}`;
+      }
+    }
+  }
+  
+  return result;
 }
 
 // Parse HP: "281/281" or "0 fnt" or just number
@@ -408,27 +437,63 @@ export default function PokemonBattle() {
         <div className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2">Battle Log</div>
         <div
           ref={logRef}
-          className={`${displayedBattle ? 'h-56' : 'h-[56vh] min-h-[16rem]'} overflow-y-auto font-mono text-xs space-y-3 text-gray-300`}
+          className={`${displayedBattle ? 'h-56' : 'h-[56vh] min-h-[16rem]'} overflow-y-auto font-mono text-xs space-y-2 text-gray-300`}
         >
           {turnLogs.length > 0 ? (
             turnLogs.map((t) => (
-              <div key={t.turn} className="border border-gray-800 rounded-md p-2.5 bg-gray-950/60">
-                <div className="text-yellow-300 font-semibold mb-1">Turn {t.turn}</div>
-                <div className="space-y-1">
-                  <div className="flex gap-2">
-                    <span className="text-gray-600">-</span>
-                    <span><span className="text-blue-300">{match.p1_name}</span> {t.playerMove || '...'}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-gray-600">-</span>
-                    <span><span className="text-purple-300">{match.p2_name}</span> {t.aiMove || '...'}</span>
-                  </div>
-                  {t.events.map((e, i) => (
-                    <div key={i} className="flex gap-2 pl-3">
-                      <span className="text-gray-700">•</span>
-                      <span className="text-gray-400">{e}</span>
+              <div key={t.turn} className="border border-gray-700 rounded-md p-3 bg-gray-900/80">
+                <div className="text-yellow-400 font-bold mb-2 flex items-center gap-2">
+                  <span className="bg-yellow-500/20 px-2 py-0.5 rounded text-yellow-300">Turn {t.turn}</span>
+                </div>
+                <div className="space-y-1.5">
+                  {/* Player moves */}
+                  {t.playerMove && (
+                    <div className="flex gap-2">
+                      <span className="text-green-400">→</span>
+                      <span><span className="text-blue-400 font-medium">{match.p1_name}</span> used <span className="text-white">{t.playerMove}</span></span>
                     </div>
-                  ))}
+                  )}
+                  {t.aiMove && (
+                    <div className="flex gap-2">
+                      <span className="text-green-400">→</span>
+                      <span><span className="text-purple-400 font-medium">{match.p2_name}</span> used <span className="text-white">{t.aiMove}</span></span>
+                    </div>
+                  )}
+                  {/* Battle events */}
+                  {t.events.map((e, i) => {
+                    // Style based on event type
+                    let eventClass = 'text-gray-400';
+                    let prefix = '•';
+                    if (e.toLowerCase().includes('fainted')) {
+                      eventClass = 'text-red-400 font-bold';
+                      prefix = '💀';
+                    } else if (e.toLowerCase().includes('super effective')) {
+                      eventClass = 'text-yellow-400 font-bold';
+                      prefix = '✨';
+                    } else if (e.toLowerCase().includes('not very effective')) {
+                      eventClass = 'text-blue-300';
+                      prefix = '💧';
+                    } else if (e.toLowerCase().includes('critical')) {
+                      eventClass = 'text-orange-400 font-bold';
+                      prefix = '⚡';
+                    } else if (e.toLowerCase().includes('missed')) {
+                      eventClass = 'text-gray-500';
+                      prefix = '❌';
+                    } else if (e.toLowerCase().includes('recovered')) {
+                      eventClass = 'text-green-400';
+                      prefix = '💚';
+                    } else if (e.includes('[') && e.match(/\d+\/\d+/)) {
+                      eventClass = 'text-amber-300';
+                      prefix = '📊';
+                    }
+                    
+                    return (
+                      <div key={i} className={`flex gap-2 pl-2 ${eventClass}`}>
+                        <span className="opacity-70">{prefix}</span>
+                        <span>{e}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))
