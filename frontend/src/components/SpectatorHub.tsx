@@ -8,6 +8,12 @@ const GAME_ICONS: Record<string, string> = {
   tictactoe: '#️⃣',
 };
 
+const GAME_LABELS: Record<string, string> = {
+  pokemon: 'Pokemon',
+  chess: 'Chess',
+  tictactoe: 'Tic-Tac-Toe',
+};
+
 function timeAgo(dateStr: string): string {
   const diff = (Date.now() - new Date(dateStr + (dateStr.includes('Z') ? '' : 'Z')).getTime()) / 1000;
   if (diff < 60) return `${Math.floor(diff)}s ago`;
@@ -38,6 +44,15 @@ interface RecentMatch {
   player2_id: number;
 }
 
+interface RecentResponse {
+  matches: RecentMatch[];
+  page?: number;
+  page_size?: number;
+  window?: number;
+  total?: number;
+  has_more?: boolean;
+}
+
 interface GameStat {
   id: string;
   name: string;
@@ -50,15 +65,31 @@ export default function SpectatorHub() {
   const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
   const [gameStats, setGameStats] = useState<GameStat[]>([]);
   const [filterGame, setFilterGame] = useState<string>('');
+  const [recentWindow, setRecentWindow] = useState<number>(100);
+  const [recentPage, setRecentPage] = useState<number>(1);
+  const [recentTotal, setRecentTotal] = useState<number>(0);
+  const [agentSearchInput, setAgentSearchInput] = useState<string>('');
+  const [agentSearch, setAgentSearch] = useState<string>('');
   const navigate = useNavigate();
 
   const fetchData = useCallback(() => {
     const gameParam = filterGame ? `?game=${filterGame}` : '';
     fetch(apiUrl(`/api/matches/live${gameParam}`))
       .then(r => r.json()).then(d => setLiveMatches(d.matches || []));
-    fetch(apiUrl(`/api/matches/recent?limit=20${filterGame ? '&game=' + filterGame : ''}`))
-      .then(r => r.json()).then(d => setRecentMatches(d.matches || []));
-  }, [filterGame]);
+    const params = new URLSearchParams({
+      window: String(recentWindow),
+      page: String(recentPage),
+      page_size: '100',
+    });
+    if (filterGame) params.set('game', filterGame);
+    if (agentSearch) params.set('search', agentSearch);
+    fetch(apiUrl(`/api/matches/recent?${params.toString()}`))
+      .then(r => r.json())
+      .then((d: RecentResponse) => {
+        setRecentMatches(d.matches || []);
+        setRecentTotal(d.total || 0);
+      });
+  }, [filterGame, recentWindow, recentPage, agentSearch]);
 
   useEffect(() => {
     fetch(apiUrl('/api/games/stats'))
@@ -71,12 +102,30 @@ export default function SpectatorHub() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  useEffect(() => {
+    setRecentPage(1);
+  }, [filterGame, recentWindow, agentSearch]);
+
   function getResultDisplay(match: RecentMatch) {
-    if (!match.result || match.result === 'draw') return { text: 'D', color: 'text-yellow-400' };
-    if (match.result === 'player1_win') return { text: 'P1 W', color: 'text-green-400' };
-    if (match.result === 'player2_win') return { text: 'P2 W', color: 'text-blue-400' };
-    if (match.result === 'timeout') return { text: 'TKO', color: 'text-orange-400' };
-    return { text: match.result, color: 'text-gray-400' };
+    if (!match.result || match.result === 'draw') {
+      return { text: 'DRAW', color: 'text-yellow-400' };
+    }
+
+    const winnerName =
+      match.winner_id === match.player1_id
+        ? match.player1_name
+        : match.winner_id === match.player2_id
+          ? match.player2_name
+          : null;
+
+    if (winnerName) {
+      return {
+        text: match.result === 'timeout' ? 'TIMEOUT' : 'WIN',
+        color: match.result === 'timeout' ? 'text-orange-400' : 'text-green-400',
+      };
+    }
+
+    return { text: '-', color: 'text-gray-500' };
   }
 
   const totalLive = liveMatches.length;
@@ -141,33 +190,107 @@ export default function SpectatorHub() {
 
       {/* ── SECTION 2: RECENT MATCHES ── */}
       <section>
-        <h2 className="text-lg font-bold tracking-wide uppercase text-white mb-4">Recent Matches</h2>
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+          <h2 className="text-lg font-bold tracking-wide uppercase text-white">Recent Matches</h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={recentWindow}
+              onChange={e => setRecentWindow(parseInt(e.target.value, 10))}
+              className="bg-[#12121a] border border-white/10 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-white/30"
+            >
+              <option value={10}>Last 10</option>
+              <option value={100}>Last 100</option>
+              <option value={1000}>Last 1000</option>
+            </select>
+            <input
+              type="text"
+              value={agentSearchInput}
+              onChange={e => setAgentSearchInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') setAgentSearch(agentSearchInput.trim());
+              }}
+              placeholder="Search agent"
+              className="bg-[#12121a] border border-white/10 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-white/30 w-[140px]"
+            />
+            <button
+              onClick={() => setAgentSearch(agentSearchInput.trim())}
+              className="bg-white/10 border border-white/10 hover:bg-white/15 text-gray-200 text-xs rounded-lg px-2.5 py-1.5 transition-colors"
+            >
+              Search
+            </button>
+            {agentSearch && (
+              <button
+                onClick={() => {
+                  setAgentSearch('');
+                  setAgentSearchInput('');
+                }}
+                className="bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
         {recentMatches.length === 0 ? (
           <div className="text-gray-500 text-sm">No completed matches yet</div>
         ) : (
           <div className="space-y-1">
             {recentMatches.map(m => {
               const result = getResultDisplay(m);
+              const p1Won = m.winner_id === m.player1_id;
+              const p2Won = m.winner_id === m.player2_id;
+              const isDraw = !m.result || m.result === 'draw' || (!p1Won && !p2Won);
               return (
                 <Link
                   key={m.id}
                   to={`/match/${m.id}`}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#12121a] border border-white/5 hover:border-white/20 transition-colors text-sm"
+                  className="grid grid-cols-[96px_1fr_84px_48px_56px] items-center gap-3 px-3 py-2.5 rounded-lg bg-[#12121a] border border-white/5 hover:border-white/20 transition-colors text-sm"
                 >
-                  <span className="text-base shrink-0">{GAME_ICONS[m.game_id] || '🎮'}</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="truncate text-white font-medium">{m.player1_name}</span>
-                    <span className="text-gray-500 mx-1.5">vs</span>
-                    <span className="truncate text-white font-medium">{m.player2_name}</span>
+                  <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-300 bg-white/10 border border-white/15 px-2 py-1 rounded-md min-w-[86px] text-center">
+                    {GAME_LABELS[m.game_id] || m.game_id}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate">
+                      <span className={`font-medium ${p1Won ? 'text-green-300' : isDraw ? 'text-white' : 'text-gray-300'}`}>
+                        {p1Won && <span className="mr-1">🏆</span>}
+                        {m.player1_name}
+                      </span>
+                      <span className="text-gray-500 mx-1.5">vs</span>
+                      <span className={`font-medium ${p2Won ? 'text-green-300' : isDraw ? 'text-white' : 'text-gray-300'}`}>
+                        {p2Won && <span className="mr-1">🏆</span>}
+                        {m.player2_name}
+                      </span>
+                    </div>
                   </div>
-                  <span className={`shrink-0 text-xs font-bold ${result.color}`}>{result.text}</span>
-                  <span className="shrink-0 text-xs text-gray-500">{m.move_count}t</span>
-                  <span className="shrink-0 text-xs text-gray-600">{m.finished_at ? timeAgo(m.finished_at) : ''}</span>
+                  <span className={`shrink-0 text-xs font-bold text-center ${result.color}`}>{result.text}</span>
+                  <span className="shrink-0 text-xs text-gray-500 text-right">{m.move_count}t</span>
+                  <span className="shrink-0 text-xs text-gray-600 text-right">{m.finished_at ? timeAgo(m.finished_at) : ''}</span>
                 </Link>
               );
             })}
           </div>
         )}
+        <div className="flex items-center justify-between mt-3 text-xs">
+          <span className="text-gray-500">
+            {recentTotal > 0 ? `Showing page ${recentPage} · ${recentTotal} total` : 'No results'}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setRecentPage(p => Math.max(1, p - 1))}
+              disabled={recentPage <= 1}
+              className="px-2.5 py-1 rounded border border-white/10 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setRecentPage(p => p + 1)}
+              disabled={recentPage * 100 >= recentTotal}
+              className="px-2.5 py-1 rounded border border-white/10 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </section>
 
       {/* ── SECTION 3: GAMES CATALOG ── */}

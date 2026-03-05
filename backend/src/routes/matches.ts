@@ -31,27 +31,52 @@ function checkTimeout(match: any): boolean {
 
 
 
-// GET /api/matches/recent?limit=20&game=<gameId>
+// GET /api/matches/recent?game=<gameId>&window=100&page=1&page_size=100&search=<agent>
 router.get('/recent', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+  const windowParam = parseInt(req.query.window as string) || 100;
+  const window = [10, 100, 1000].includes(windowParam) ? windowParam : 100;
+  const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+  const pageSize = Math.min(Math.max(parseInt(req.query.page_size as string) || 100, 1), 100);
   const game = req.query.game as string | undefined;
+  const search = (req.query.search as string | undefined)?.trim();
 
-  let query = `
-    SELECT m.id, m.game_id, m.status, m.result, m.move_count, m.started_at, m.finished_at,
-           a1.agent_name as player1_name, a2.agent_name as player2_name,
-           m.winner_id, m.player1_id, m.player2_id
+  const offset = (page - 1) * pageSize;
+  if (offset >= window) {
+    res.json({ matches: [], page, page_size: pageSize, window, total: 0, has_more: false });
+    return;
+  }
+  const effectiveLimit = Math.min(pageSize, window - offset);
+
+  let baseWhere = `
     FROM matches m
     LEFT JOIN agents a1 ON m.player1_id = a1.id
     LEFT JOIN agents a2 ON m.player2_id = a2.id
     WHERE m.status = 'completed'
   `;
-  const params: (string | number)[] = [];
-  if (game) { query += ' AND m.game_id = ?'; params.push(game); }
-  query += ' ORDER BY m.finished_at DESC LIMIT ?';
-  params.push(limit);
+  const whereParams: (string | number)[] = [];
+  if (game) { baseWhere += ' AND m.game_id = ?'; whereParams.push(game); }
+  if (search) {
+    baseWhere += ' AND (LOWER(COALESCE(a1.agent_name, \'\')) LIKE ? OR LOWER(COALESCE(a2.agent_name, \'\')) LIKE ?)';
+    const pat = `%${search.toLowerCase()}%`;
+    whereParams.push(pat, pat);
+  }
+
+  let query = `
+    SELECT m.id, m.game_id, m.status, m.result, m.move_count, m.started_at, m.finished_at,
+           a1.agent_name as player1_name, a2.agent_name as player2_name,
+           m.winner_id, m.player1_id, m.player2_id
+    ${baseWhere}
+    ORDER BY m.finished_at DESC
+    LIMIT ? OFFSET ?
+  `;
+  const params: (string | number)[] = [...whereParams, effectiveLimit, offset];
+
+  const totalRows = (db.prepare(`SELECT COUNT(*) as cnt ${baseWhere}`) as any).get(...whereParams)?.cnt || 0;
+  const total = Math.min(totalRows, window);
+  const hasMore = offset + effectiveLimit < total;
 
   const matches = (db.prepare(query) as any).all(...params);
-  res.json({ matches });
+  res.json({ matches, page, page_size: pageSize, window, total, has_more: hasMore });
 });
 
 // GET /api/matches/live?game=<gameId>

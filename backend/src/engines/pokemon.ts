@@ -44,6 +44,22 @@ function parseWinner(raw: string): string | null {
   return null;
 }
 
+function parseError(raw: string): string | null {
+  const line = raw.split('\n').find(l => l.startsWith('|error|'));
+  if (!line) return null;
+  return line.replace('|error|', '').trim();
+}
+
+function parseTurn(raw: string): number | null {
+  const turns = raw
+    .split('\n')
+    .filter(l => l.startsWith('|turn|'))
+    .map(l => Number(l.replace('|turn|', '').trim()))
+    .filter(n => Number.isFinite(n) && n > 0);
+  if (turns.length === 0) return null;
+  return Math.max(...turns);
+}
+
 function parseBattleLog(raw: string): string {
   return raw.split('\n')
     .filter(l => /^\|(move|switch|-damage|-heal|faint|-supereffective|-resisted|-crit|-miss|turn|win|tie)\|/.test(l))
@@ -140,6 +156,20 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
 
   // Read both streams
   const [p1Raw, p2Raw] = await Promise.all([drainStream(battle.streams.p1, 2000), drainStream(battle.streams.p2, 2000)]);
+  const combinedRaw = `${p1Raw}\n${p2Raw}`;
+
+  const error = parseError(combinedRaw);
+  if (error) {
+    return {
+      valid: false,
+      p1View: formatView(battle.p1Request),
+      p2View: formatView(battle.p2Request),
+      battleLog: '',
+      winner: battle.winner,
+      turn: battle.turn,
+      error,
+    };
+  }
 
   const newP1Req = parseRequest(p1Raw);
   const newP2Req = parseRequest(p2Raw);
@@ -149,8 +179,28 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
   const winner = parseWinner(p1Raw) || parseWinner(p2Raw);
   if (winner) battle.winner = winner;
 
-  battle.turn++;
-  const log = parseBattleLog(p1Raw + '\n' + p2Raw);
+  const log = parseBattleLog(combinedRaw);
+  const nextTurn = parseTurn(combinedRaw);
+  const progressed = Boolean(log) || Boolean(winner) || nextTurn !== null;
+  if (!progressed) {
+    return {
+      valid: false,
+      p1View: formatView(battle.p1Request),
+      p2View: formatView(battle.p2Request),
+      battleLog: '',
+      winner: battle.winner,
+      turn: battle.turn,
+      error: 'No battle progress for this action. If your active Pokemon fainted, you must switch.',
+    };
+  }
+
+  if (nextTurn !== null) {
+    battle.turn = nextTurn;
+  } else if (winner) {
+    battle.turn = Math.max(1, battle.turn);
+  } else {
+    battle.turn++;
+  }
   battle.log.push(log);
 
   return {

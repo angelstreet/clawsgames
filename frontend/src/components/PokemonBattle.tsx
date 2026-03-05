@@ -28,6 +28,7 @@ interface MatchData {
   id: string;
   game_id: string;
   status: string;
+  move_count?: number;
   result?: string;
   winner_id?: number | null;
   player1_id?: number;
@@ -204,6 +205,7 @@ export default function PokemonBattle() {
   const { matchId } = useParams();
   const navigate = useNavigate();
   const [match, setMatch] = useState<MatchData | null>(null);
+  const [lastBattle, setLastBattle] = useState<BattleState | null>(null);
   const [loading, setLoading] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -221,17 +223,15 @@ export default function PokemonBattle() {
     const load = () =>
       fetch(apiUrl(`/api/pokemon/${matchId}`))
         .then(r => r.json())
-        .then(d => { setMatch(d); setLoading(false); });
+        .then(d => {
+          setMatch(d);
+          if (d?.battle) setLastBattle(d.battle);
+          setLoading(false);
+        });
     load();
     const interval = setInterval(load, 3000);
     return () => clearInterval(interval);
   }, [matchId]);
-
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [match?.moves]);
 
   const safeMoves = match?.moves || [];
   const safeP1Name = match?.p1_name || 'Player 1';
@@ -262,7 +262,19 @@ export default function PokemonBattle() {
         }
       }
     }
-    return Array.from(byTurn.values()).sort((a, b) => a.turn - b.turn);
+    const sorted = Array.from(byTurn.values()).sort((a, b) => a.turn - b.turn);
+    const compact: TurnLog[] = [];
+    for (const turn of sorted) {
+      const prev = compact[compact.length - 1];
+      const duplicateNoEvent =
+        turn.events.length === 0 &&
+        prev &&
+        prev.events.length === 0 &&
+        prev.playerMove === turn.playerMove &&
+        prev.aiMove === turn.aiMove;
+      if (!duplicateNoEvent) compact.push(turn);
+    }
+    return compact;
   }, [safeMoves, safeP1Id, safeP2Id, safeP1Name, safeP2Name]);
 
   if (loading) return (
@@ -276,9 +288,10 @@ export default function PokemonBattle() {
 
   if (!match) return <p className="text-red-400">Match not found.</p>;
 
-  const p1Active = match.battle?.p1_pokemon?.find(p => p.active);
-  const p2Active = match.battle?.p2_pokemon?.find(p => p.active);
-  const battleOver = match.status === 'completed' || match.battle?.winner;
+  const displayedBattle = match.battle || (match.status === 'completed' ? lastBattle : null);
+  const p1Active = displayedBattle?.p1_pokemon?.find(p => p.active);
+  const p2Active = displayedBattle?.p2_pokemon?.find(p => p.active);
+  const battleOver = match.status === 'completed' || displayedBattle?.winner;
   const duration = formatDuration(match.started_at, match.finished_at);
   const winnerName =
     match.winner_id === match.player1_id
@@ -303,14 +316,16 @@ export default function PokemonBattle() {
             {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}
           </div>
           <div className="text-xs text-gray-500">
-            Turn {match.battle?.turn ?? '?'} · {match.status === 'active' ? '🔴 LIVE' : '✅ Ended'}
+            {match.status === 'active'
+              ? `Turn ${match.battle?.turn ?? match.move_count ?? '?'} · LIVE`
+              : `Completed · Duration ${duration}${match.move_count ? ` (turn ${match.move_count})` : ''}`}
           </div>
         </div>
         <div className="text-sm text-gray-600 text-right">#{matchId?.slice(0, 8)}</div>
       </div>
 
-      {/* Winner Banner */}
-      {battleOver && (match.battle?.winner || match.status === 'completed') && (
+      {/* Winner Banner (only when live battle state is present) */}
+      {displayedBattle && battleOver && (displayedBattle?.winner || match.status === 'completed') && (
         <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3 mb-4">
           <div className="text-yellow-300 font-bold text-lg text-center">
             {winnerName ? `Winner: ${winnerName}` : 'Battle Ended'}
@@ -322,13 +337,13 @@ export default function PokemonBattle() {
       )}
 
       {/* Battle Arena */}
-      {match.battle ? (
+      {displayedBattle ? (
         <div className="bg-gradient-to-b from-blue-950 to-gray-950 rounded-xl border border-blue-900/40 p-4 mb-4">
           {/* Main battle layout */}
           <div className="flex gap-4 items-start">
             {/* P1 team sidebar */}
             <div className="hidden sm:block w-28 shrink-0">
-              <TeamSidebar label={match.p1_name} pokemons={match.battle.p1_pokemon} />
+              <TeamSidebar label={match.p1_name} pokemons={displayedBattle.p1_pokemon} />
             </div>
 
             {/* Battle field */}
@@ -351,14 +366,14 @@ export default function PokemonBattle() {
 
               {/* Mobile team displays */}
               <div className="flex sm:hidden justify-between gap-2 mt-3 px-2">
-                <TeamSidebar label={match.p1_name} pokemons={match.battle.p1_pokemon} />
-                <TeamSidebar label={match.p2_name} pokemons={match.battle.p2_pokemon} isP2 />
+                <TeamSidebar label={match.p1_name} pokemons={displayedBattle.p1_pokemon} />
+                <TeamSidebar label={match.p2_name} pokemons={displayedBattle.p2_pokemon} isP2 />
               </div>
             </div>
 
             {/* P2 team sidebar */}
             <div className="hidden sm:block w-28 shrink-0">
-              <TeamSidebar label={match.p2_name} pokemons={match.battle.p2_pokemon} isP2 />
+              <TeamSidebar label={match.p2_name} pokemons={displayedBattle.p2_pokemon} isP2 />
             </div>
           </div>
         </div>
@@ -384,7 +399,7 @@ export default function PokemonBattle() {
         <div className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2">Battle Log</div>
         <div
           ref={logRef}
-          className="h-56 overflow-y-auto font-mono text-xs space-y-3 text-gray-300"
+          className={`${displayedBattle ? 'h-56' : 'h-[56vh] min-h-[16rem]'} overflow-y-auto font-mono text-xs space-y-3 text-gray-300`}
         >
           {turnLogs.length > 0 ? (
             turnLogs.map((t) => (

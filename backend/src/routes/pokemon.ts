@@ -9,6 +9,73 @@ import { v4 as uuid } from 'uuid';
 import type { Response } from 'express';
 
 const router = Router();
+const DEFAULT_MAX_TURNS = 50;
+const DEFAULT_TURN_TIMEOUT_SEC = 120;
+
+function getPokemonLimits() {
+  const row = db.prepare('SELECT max_turns, turn_timeout_sec FROM games WHERE id = ?').get('pokemon') as any;
+  return {
+    maxTurns: row?.max_turns || DEFAULT_MAX_TURNS,
+    turnTimeoutSec: row?.turn_timeout_sec || DEFAULT_TURN_TIMEOUT_SEC,
+  };
+}
+
+function hpRatio(condition: string): number {
+  if (!condition || condition.includes('fnt') || condition === '0') return 0;
+  const m = condition.match(/(\d+)\/(\d+)/);
+  if (!m) return 1;
+  const cur = parseInt(m[1], 10);
+  const max = parseInt(m[2], 10);
+  if (!max) return 0;
+  return cur / max;
+}
+
+function teamHpScore(pokemons: any[] = []): number {
+  return pokemons.reduce((acc, p) => acc + hpRatio(String(p?.condition || '0')), 0);
+}
+
+async function settleEloAndReport(match: any, winnerId: number | null, matchResult: string, matchId: string) {
+  const r1 = db.prepare('SELECT elo FROM ratings WHERE agent_id = ? AND game_id = ?').get(match.player1_id, 'pokemon') as any;
+  const r2 = db.prepare('SELECT elo FROM ratings WHERE agent_id = ? AND game_id = ?').get(match.player2_id, 'pokemon') as any;
+  if (!r1 || !r2) return;
+
+  const score1 = winnerId === match.player1_id ? 1 : winnerId === match.player2_id ? 0 : 0.5;
+  const { newA, newB } = calculateElo(r1.elo, r2.elo, score1);
+  const w1 = score1 === 1 ? 'wins' : score1 === 0 ? 'losses' : 'draws';
+  const w2 = score1 === 0 ? 'wins' : score1 === 1 ? 'losses' : 'draws';
+  db.prepare(`UPDATE ratings SET elo = ?, ${w1} = ${w1} + 1 WHERE agent_id = ? AND game_id = ?`).run(newA, match.player1_id, 'pokemon');
+  db.prepare(`UPDATE ratings SET elo = ?, ${w2} = ${w2} + 1 WHERE agent_id = ? AND game_id = ?`).run(newB, match.player2_id, 'pokemon');
+
+  const p1 = db.prepare('SELECT * FROM agents WHERE id = ?').get(match.player1_id) as any;
+  const p2 = db.prepare('SELECT * FROM agents WHERE id = ?').get(match.player2_id) as any;
+  await reportToRoC({
+    gateway_id: p1.gateway_id,
+    agent_name: p1.agent_name,
+    game: 'pokemon',
+    result: (score1 === 1 ? 'win' : score1 === 0 ? 'loss' : 'draw') as any,
+    opponent_gateway_id: p2.gateway_id,
+    opponent_name: p2.agent_name,
+    elo_before: r1.elo,
+    elo_after: newA,
+    match_id: matchId
+  });
+}
+
+async function enforceInactivityTimeout(match: any): Promise<boolean> {
+  if (!match || match.status !== 'active') return false;
+  const { turnTimeoutSec } = getPokemonLimits();
+  const lastMove = db.prepare('SELECT created_at FROM moves WHERE match_id = ? ORDER BY id DESC LIMIT 1').get(match.id) as any;
+  const lastTime = lastMove?.created_at ? new Date(`${lastMove.created_at}Z`).getTime() : new Date(`${match.started_at}Z`).getTime();
+  const elapsedSec = (Date.now() - lastTime) / 1000;
+  if (elapsedSec <= turnTimeoutSec) return false;
+
+  const winnerId = match.player2_id; // solo mode: human inactivity => AI win
+  db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = 'timeout', finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .run(winnerId, match.id);
+  await settleEloAndReport(match, winnerId, 'timeout', match.id);
+  destroyBattle(match.id);
+  return true;
+}
 
 router.post('/solo', authMiddleware, async (req: AuthedRequest, res: Response) => {
   const matchId = uuid();
@@ -23,14 +90,21 @@ router.post('/solo', authMiddleware, async (req: AuthedRequest, res: Response) =
   db.prepare('INSERT OR IGNORE INTO ratings (agent_id, game_id) VALUES (?, ?)').run(aiAgent.id, 'pokemon');
 
   const { p1View } = await createBattle(matchId);
+  const limits = getPokemonLimits();
 
   res.json({ match_id: matchId, game_id: 'pokemon', opponent: modelName, battle_view: p1View, your_turn: true,
-    instructions: 'Use "move 1-4" to attack or "switch 1-6" to switch Pokemon. Max 50 turns - if no winner, most remaining HP% wins.' });
+    instructions: 'Use "move 1-4" to attack or "switch 1-6" to switch Pokemon. Max turns and timeout are enforced; at max turns, highest remaining HP% wins.',
+    limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: limits.maxTurns } });
 });
 
 router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Response) => {
   const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
+  if (await enforceInactivityTimeout(match)) {
+    const ended = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+    res.status(400).json({ error: 'Match timed out', status: ended?.status, result: ended?.result, winner_id: ended?.winner_id });
+    return;
+  }
   if (match.status !== 'active') { res.status(400).json({ error: `Match is ${match.status}` }); return; }
 
   const battle = getBattleState(req.params.matchId);
@@ -41,6 +115,10 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   // Check if player needs to force switch
   const p1ForceSwitch = battle.p1Request?.forceSwitch?.[0];
   const p2ForceSwitch = battle.p2Request?.forceSwitch?.[0];
+  if (p1ForceSwitch && !/^switch [1-6]$/i.test(String(playerMove || '').trim())) {
+    res.status(400).json({ error: 'Your active Pokemon fainted. You must play a switch command (example: "switch 2").' });
+    return;
+  }
 
   // Get AI move
   let aiCommand: string;
@@ -82,35 +160,75 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(winnerId, matchResult, result.turn, req.params.matchId);
 
-    // ELO + RoC
-    const r1 = db.prepare('SELECT elo FROM ratings WHERE agent_id = ? AND game_id = ?').get(match.player1_id, 'pokemon') as any;
-    const r2 = db.prepare('SELECT elo FROM ratings WHERE agent_id = ? AND game_id = ?').get(match.player2_id, 'pokemon') as any;
-    if (r1 && r2) {
-      const score1 = result.winner === 'Player 1' ? 1 : result.winner === 'tie' ? 0.5 : 0;
-      const { newA, newB } = calculateElo(r1.elo, r2.elo, score1);
-      const w1 = score1 === 1 ? 'wins' : score1 === 0 ? 'losses' : 'draws';
-      const w2 = score1 === 0 ? 'wins' : score1 === 1 ? 'losses' : 'draws';
-      db.prepare(`UPDATE ratings SET elo = ?, ${w1} = ${w1} + 1 WHERE agent_id = ? AND game_id = ?`).run(newA, match.player1_id, 'pokemon');
-      db.prepare(`UPDATE ratings SET elo = ?, ${w2} = ${w2} + 1 WHERE agent_id = ? AND game_id = ?`).run(newB, match.player2_id, 'pokemon');
-      const p1 = db.prepare('SELECT * FROM agents WHERE id = ?').get(match.player1_id) as any;
-      const p2 = db.prepare('SELECT * FROM agents WHERE id = ?').get(match.player2_id) as any;
-      reportToRoC({ gateway_id: p1.gateway_id, agent_name: p1.agent_name, game: 'pokemon', result: (score1 === 1 ? 'win' : score1 === 0 ? 'loss' : 'draw') as any, opponent_gateway_id: p2.gateway_id, opponent_name: p2.agent_name, elo_before: r1.elo, elo_after: newA, match_id: req.params.matchId });
-    }
+    await settleEloAndReport(match, winnerId, matchResult, req.params.matchId);
     destroyBattle(req.params.matchId);
-    res.json({ your_move: playerMove, ai_move: aiCommand, battle_log: result.battleLog, status: 'completed', result: matchResult, winner: result.winner, turn: result.turn });
+    res.json({
+      your_move: playerMove,
+      ai_move: aiCommand,
+      battle_log: result.battleLog,
+      status: 'completed',
+      result: matchResult,
+      winner: result.winner,
+      turn: result.turn,
+      reason: 'normal_win',
+      limits: { max_turns: getPokemonLimits().maxTurns, turn_timeout_sec: getPokemonLimits().turnTimeoutSec, turns_remaining: 0 },
+    });
+    return;
+  }
+
+  // Hard max-turn cap: decide winner by remaining HP ratio
+  const limits = getPokemonLimits();
+  if (result.turn >= limits.maxTurns) {
+    const current = getBattleState(req.params.matchId);
+    const p1Score = teamHpScore(current?.p1Request?.side?.pokemon || []);
+    const p2Score = teamHpScore(current?.p2Request?.side?.pokemon || []);
+    const winnerId = p1Score > p2Score ? match.player1_id : p2Score > p1Score ? match.player2_id : null;
+    const matchResult = winnerId === match.player1_id ? 'player1_win' : winnerId === match.player2_id ? 'player2_win' : 'draw';
+    db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(winnerId, matchResult, result.turn, req.params.matchId);
+    await settleEloAndReport(match, winnerId, matchResult, req.params.matchId);
+    destroyBattle(req.params.matchId);
+    res.json({
+      your_move: playerMove,
+      ai_move: aiCommand,
+      battle_log: result.battleLog,
+      status: 'completed',
+      result: matchResult,
+      winner: winnerId === match.player1_id ? 'Player 1' : winnerId === match.player2_id ? 'Player 2' : 'tie',
+      turn: result.turn,
+      reason: 'max_turn_limit_hp',
+      score: { p1_hp_ratio_sum: p1Score, p2_hp_ratio_sum: p2Score },
+      limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: 0 },
+    });
     return;
   }
 
   db.prepare('UPDATE matches SET move_count = ?, current_turn = 1 WHERE id = ?').run(result.turn, req.params.matchId);
-  res.json({ your_move: playerMove, ai_move: aiCommand, battle_view: result.p1View, battle_log: result.battleLog, turn: result.turn, status: 'active' });
+  res.json({
+    your_move: playerMove,
+    ai_move: aiCommand,
+    battle_view: result.p1View,
+    battle_log: result.battleLog,
+    turn: result.turn,
+    status: 'active',
+    limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - result.turn) },
+  });
 });
 
-router.get('/:matchId', (req, res) => {
+router.get('/:matchId', async (req, res) => {
+  const base = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  if (base) await enforceInactivityTimeout(base);
   const match = db.prepare(`SELECT m.*, a1.agent_name as p1_name, a2.agent_name as p2_name FROM matches m LEFT JOIN agents a1 ON m.player1_id = a1.id LEFT JOIN agents a2 ON m.player2_id = a2.id WHERE m.id = ?`).get(req.params.matchId) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
   const battle = getBattleState(req.params.matchId);
   const moves = db.prepare('SELECT * FROM moves WHERE match_id = ? ORDER BY move_number').all(req.params.matchId);
-  res.json({ ...match, battle: battle ? { turn: battle.turn, winner: battle.winner, p1_pokemon: battle.p1Request?.side?.pokemon, p2_pokemon: battle.p2Request?.side?.pokemon } : null, moves });
+  const limits = getPokemonLimits();
+  res.json({
+    ...match,
+    battle: battle ? { turn: battle.turn, winner: battle.winner, p1_pokemon: battle.p1Request?.side?.pokemon, p2_pokemon: battle.p2Request?.side?.pokemon } : null,
+    moves,
+    limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - (match.move_count || 0)) },
+  });
 });
 
 export default router;

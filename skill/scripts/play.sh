@@ -38,26 +38,96 @@ for m in json.load(sys.stdin)['models']:
     ;;
 
   solo)
-    MODEL_ARG=""
-    if [[ "${3:-}" == "--model" ]]; then MODEL_ARG=",\"model\":\"$4\""; fi
-    
-    MATCH=$(curl -s -X POST "$API/games/$GAME/solo" \
-      -H "Content-Type: application/json" -H "$AUTH" \
-      -d "{\"agent_name\":\"$AGENT_NAME\"$MODEL_ARG}")
-    MID=$(echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['match_id'])")
-    OPP=$(echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['opponent'])")
-    echo "Playing $GAME vs $OPP (match: $MID)"
-    echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['board_display'])"
-    echo "MATCH_ID=$MID"
+    if [[ "$GAME" == "pokemon" ]]; then
+      MATCH=$(curl -s -X POST "$API/pokemon/solo" \
+        -H "Content-Type: application/json" -H "$AUTH" \
+        -d "{\"agent_name\":\"$AGENT_NAME\"}")
+      MID=$(echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['match_id'])")
+      OPP=$(echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['opponent'])")
+      echo "Playing $GAME vs $OPP (match: $MID)"
+      echo "$MATCH" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('instructions','')); lim=d.get('limits') or {}; mt=lim.get('max_turns'); tt=lim.get('turn_timeout_sec'); tr=lim.get('turns_remaining'); print(f'Limits: max_turns={mt}, turn_timeout={tt}s, turns_remaining={tr}' if mt else ''); print(''); print(d.get('battle_view',''))"
+      echo "Tip: next move with: ./play.sh move $MID \"move 1\""
+      echo "Tip: or switch with: ./play.sh move $MID \"switch 2\""
+      echo "MATCH_ID=$MID"
+    else
+      MODEL_ARG=""
+      if [[ "${3:-}" == "--model" ]]; then MODEL_ARG=",\"model\":\"$4\""; fi
+      
+      MATCH=$(curl -s -X POST "$API/games/$GAME/solo" \
+        -H "Content-Type: application/json" -H "$AUTH" \
+        -d "{\"agent_name\":\"$AGENT_NAME\"$MODEL_ARG}")
+      MID=$(echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['match_id'])")
+      OPP=$(echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['opponent'])")
+      echo "Playing $GAME vs $OPP (match: $MID)"
+      echo "$MATCH" | python3 -c "import sys,json;print(json.load(sys.stdin)['board_display'])"
+      echo "MATCH_ID=$MID"
+    fi
     ;;
 
   move)
     # play.sh move <match_id> <move>
     MID="$2"
     MOVE="$3"
-    curl -s -X POST "$API/solo/$MID/move" \
-      -H "Content-Type: application/json" -H "$AUTH" \
-      -d "{\"move\":\"$MOVE\"}" | python3 -c "
+    # Auto-route Pokemon matches to pokemon API for full battle view/options
+    GAME_ID=$(curl -s "$API/matches/$MID" -H "$AUTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('game_id',''))" 2>/dev/null || true)
+    if [[ "$GAME_ID" == "pokemon" ]]; then
+      RESP=$(curl -s -X POST "$API/pokemon/$MID/move" \
+        -H "Content-Type: application/json" -H "$AUTH" \
+        -d "{\"move\":\"$MOVE\"}")
+
+      # If server requires forced switch, auto-pick first valid switch slot to avoid timeout.
+      FORCE_ERR=$(echo "$RESP" | python3 - <<'PY'
+import sys,json
+try:
+  d=json.load(sys.stdin)
+  print(d.get('error',''))
+except Exception:
+  print('')
+PY
+)
+      if echo "$FORCE_ERR" | grep -qi "switch"; then
+        AUTO_SWITCH=$(curl -s "$API/pokemon/$MID" -H "$AUTH" | python3 - <<'PY'
+import sys,json
+try:
+  d=json.load(sys.stdin)
+  p1=((d.get('battle') or {}).get('p1_pokemon') or [])
+  for idx,p in enumerate(p1, start=1):
+    cond=str(p.get('condition',''))
+    if (not p.get('active')) and cond != '0 fnt':
+      print(f'switch {idx}')
+      break
+  else:
+    print('switch 2')
+except Exception:
+  print('switch 2')
+PY
+)
+        RESP=$(curl -s -X POST "$API/pokemon/$MID/move" \
+          -H "Content-Type: application/json" -H "$AUTH" \
+          -d "{\"move\":\"$AUTO_SWITCH\"}")
+      fi
+
+      echo "$RESP" | python3 -c "
+import sys,json;m=json.load(sys.stdin)
+if 'error' in m: print(f'Error: {m[\"error\"]}'); sys.exit(1)
+print(f'Your move: {m.get(\"your_move\")}')
+if m.get('ai_move'): print(f'AI move: {m[\"ai_move\"]}')
+if m.get('battle_log'): print(m.get('battle_log',''))
+lim=m.get('limits') or {}
+if lim.get('max_turns') is not None:
+    print(f'Limits: max_turns={lim.get(\"max_turns\")}, timeout={lim.get(\"turn_timeout_sec\")}s, turns_remaining={lim.get(\"turns_remaining\")}')
+if m.get('battle_view'):
+    print('\\n=== Your options ===')
+    print(m.get('battle_view',''))
+else:
+    print(m.get('board_display',''))
+print(f'Status: {m[\"status\"]}')
+if m.get('result'): print(f'Result: {m[\"result\"]} ({m.get(\"reason\",\"\")})')
+"
+    else
+      curl -s -X POST "$API/solo/$MID/move" \
+        -H "Content-Type: application/json" -H "$AUTH" \
+        -d "{\"move\":\"$MOVE\"}" | python3 -c "
 import sys,json;m=json.load(sys.stdin)
 if 'error' in m: print(f'Error: {m[\"error\"]}'); sys.exit(1)
 print(f'Your move: {m.get(\"your_move\")}')
@@ -66,6 +136,7 @@ print(m.get('board_display',''))
 print(f'Status: {m[\"status\"]}')
 if m.get('result'): print(f'Result: {m[\"result\"]} ({m.get(\"reason\",\"\")})')
 "
+    fi
     ;;
 
   queue)
@@ -99,6 +170,6 @@ for i,r in enumerate(json.load(sys.stdin)['rankings']):
   *)
     echo "Usage: play.sh <command> [game] [args]"
     echo "Commands: solo, move, models, queue, challenge, join, leaderboard"
-    echo "Games: tictactoe, chess"
+    echo "Games: tictactoe, chess, pokemon"
     ;;
 esac
