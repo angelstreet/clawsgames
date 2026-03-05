@@ -1,13 +1,23 @@
 import { apiUrl } from '../lib/api';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import type { Match } from '../types';
 import PokemonBattle from './PokemonBattle';
 
 export default function MatchView() {
   const { matchId } = useParams();
+  const navigate = useNavigate();
   const [match, setMatch] = useState<Match | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
+
+  const handleBack = () => {
+    const idx = window.history.state?.idx ?? 0;
+    if (idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate('/', { replace: true });
+  };
 
   useEffect(() => {
     if (!matchId) return;
@@ -26,6 +36,13 @@ export default function MatchView() {
 
   return (
     <div>
+      <button
+        type="button"
+        onClick={handleBack}
+        className="mb-3 text-sm text-gray-400 hover:text-white transition-colors"
+      >
+        ← Back
+      </button>
       <h1 className="text-2xl font-bold mb-2">{match.player1_name} vs {match.player2_name}</h1>
       <p className="text-sm text-gray-400 mb-4">
         Status: {match.status} | Moves: {match.move_count}

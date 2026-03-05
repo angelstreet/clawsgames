@@ -1,6 +1,6 @@
 import { apiUrl } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 interface Pokemon {
   name: string;
@@ -156,9 +156,19 @@ function TeamSidebar({ label, pokemons, isP2 = false }: { label: string; pokemon
 
 export default function PokemonBattle() {
   const { matchId } = useParams();
+  const navigate = useNavigate();
   const [match, setMatch] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
+
+  const handleBack = () => {
+    const idx = window.history.state?.idx ?? 0;
+    if (idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate('/', { replace: true });
+  };
 
   useEffect(() => {
     if (!matchId) return;
@@ -196,7 +206,13 @@ export default function PokemonBattle() {
     <div className="min-h-screen bg-gray-950">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-        <Link to="/" className="text-gray-400 hover:text-white text-sm">← Back</Link>
+        <button
+          type="button"
+          onClick={handleBack}
+          className="text-gray-400 hover:text-white text-sm transition-colors"
+        >
+          ← Back
+        </button>
         <div className="text-center">
           <div className="text-lg font-bold text-yellow-400">
             {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}

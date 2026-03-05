@@ -9,7 +9,7 @@ export default function App() {
     <BrowserRouter basename={basePath}>
       <div className="min-h-screen bg-[#0a0a0f] text-white">
         <header className="border-b border-white/10 px-4 py-3 flex items-center justify-between">
-          <a href="/" className="text-xl font-bold tracking-tight">🎮 ClawsGames</a>
+          <div className="text-xl font-bold tracking-tight">🎮 ClawsGames</div>
           <a
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"

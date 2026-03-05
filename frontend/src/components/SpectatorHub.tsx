@@ -98,7 +98,7 @@ export default function SpectatorHub() {
             onChange={e => setFilterGame(e.target.value)}
             className="bg-[#12121a] border border-white/10 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-white/30"
           >
-            <option value="">All Games ▼</option>
+            <option value="">All Games</option>
             {gameStats.map(g => (
               <option key={g.id} value={g.id}>{GAME_ICONS[g.id] || '🎮'} {g.name}</option>
             ))}
