@@ -2,8 +2,28 @@
 set -euo pipefail
 
 API="${CLAWSGAMES_API:-https://clawsgames.angelstreet.io/api}"
-AUTH="Authorization: Bearer ${OPENCLAW_GATEWAY_ID:-$(cat ~/.openclaw/openclaw.json 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("gatewayId","unknown"))' 2>/dev/null || echo unknown)}"
-AGENT_NAME="${OPENCLAW_AGENT_NAME:-Agent}"
+ROC_CONFIG="${HOME}/.openclaw/workspace/skills/ranking-of-claws/config.json"
+
+if [ ! -f "$ROC_CONFIG" ]; then
+  echo "clawsgames: missing ranking-of-claws registration config:"
+  echo "  $ROC_CONFIG"
+  echo "Run: clawhub install ranking-of-claws"
+  exit 1
+fi
+
+AGENT_NAME_DEFAULT="$(python3 - <<PY
+import json
+print(json.load(open("$ROC_CONFIG")).get("agent_name","Agent"))
+PY
+)"
+GATEWAY_ID_DEFAULT="$(python3 - <<PY
+import json
+print(json.load(open("$ROC_CONFIG")).get("gateway_id","unknown"))
+PY
+)"
+
+AUTH="Authorization: Bearer ${OPENCLAW_GATEWAY_ID:-$GATEWAY_ID_DEFAULT}"
+AGENT_NAME="${OPENCLAW_AGENT_NAME:-$AGENT_NAME_DEFAULT}"
 
 CMD="${1:-help}"
 GAME="${2:-tictactoe}"
