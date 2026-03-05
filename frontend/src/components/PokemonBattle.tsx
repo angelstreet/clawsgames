@@ -1,5 +1,5 @@
 import { apiUrl } from '../lib/api';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 interface Pokemon {
@@ -21,16 +21,30 @@ interface Move {
   move_data: string;
   board_state?: string;
   move_number: number;
+  agent_id?: number;
 }
 
 interface MatchData {
   id: string;
   game_id: string;
   status: string;
+  result?: string;
+  winner_id?: number | null;
+  player1_id?: number;
+  player2_id?: number;
+  started_at?: string;
+  finished_at?: string | null;
   p1_name: string;
   p2_name: string;
   battle: BattleState | null;
   moves: Move[];
+}
+
+interface TurnLog {
+  turn: number;
+  playerMove?: string;
+  aiMove?: string;
+  events: string[];
 }
 
 // Parse "Raging Bolt, L78, M" → { name: "Raging Bolt", level: 78 }
@@ -53,6 +67,38 @@ function getSpriteUrl(details: string, back = false): string {
   const spriteName = toSpriteName(name);
   const dir = back ? 'gen5-back' : 'gen5';
   return `https://play.pokemonshowdown.com/sprites/${dir}/${spriteName}.gif`;
+}
+
+function toMs(dateStr?: string | null): number | null {
+  if (!dateStr) return null;
+  const ms = new Date(dateStr + (dateStr.includes('Z') ? '' : 'Z')).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function formatDuration(startedAt?: string, finishedAt?: string | null): string {
+  const start = toMs(startedAt);
+  if (!start) return '-';
+  const end = toMs(finishedAt) ?? Date.now();
+  const diff = Math.max(0, end - start);
+  const totalSec = Math.floor(diff / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function readableEvent(line: string, p1: string, p2: string): string {
+  return line
+    .replace(/^move p1a:\s*/i, `${p1}: `)
+    .replace(/^move p2a:\s*/i, `${p2}: `)
+    .replace(/^switch p1a:\s*/i, `${p1}: switched to `)
+    .replace(/^switch p2a:\s*/i, `${p2}: switched to `)
+    .replace(/^faint p1a:\s*/i, `${p1}: fainted `)
+    .replace(/^faint p2a:\s*/i, `${p2}: fainted `)
+    .replace(/^win\s+/i, 'Winner: ')
+    .trim();
 }
 
 // Parse HP: "281/281" or "0 fnt" or just number
@@ -99,11 +145,11 @@ function PokemonCard({ pokemon, back = false, isActive = false }: { pokemon: Pok
   return (
     <div className={`flex flex-col items-center gap-1 ${!isActive ? 'opacity-50' : ''}`}>
       {/* Sprite */}
-      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center">
+      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-gradient-to-b from-slate-700/30 to-slate-900/30 ring-1 ring-white/10">
         <img
           src={getSpriteUrl(pokemon.details, back)}
           alt={name}
-          className={`max-w-full max-h-full object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''} ${back ? '' : 'scale-x-[-1]'}`}
+          className={`max-w-full max-h-full object-contain pixelated drop-shadow-[0_6px_8px_rgba(0,0,0,0.7)] ${fainted ? 'grayscale opacity-40' : ''} ${back ? '' : 'scale-x-[-1]'}`}
           style={{ imageRendering: 'pixelated' }}
           onError={(e) => {
             (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`;
@@ -187,6 +233,38 @@ export default function PokemonBattle() {
     }
   }, [match?.moves]);
 
+  const safeMoves = match?.moves || [];
+  const safeP1Name = match?.p1_name || 'Player 1';
+  const safeP2Name = match?.p2_name || 'Player 2';
+  const safeP1Id = match?.player1_id;
+  const safeP2Id = match?.player2_id;
+
+  const turnLogs = useMemo(() => {
+    const byTurn = new Map<number, TurnLog>();
+    for (const move of safeMoves) {
+      if (!byTurn.has(move.move_number)) {
+        byTurn.set(move.move_number, { turn: move.move_number, events: [] });
+      }
+      const t = byTurn.get(move.move_number)!;
+      if (move.agent_id === safeP1Id) t.playerMove = move.move_data;
+      if (move.agent_id === safeP2Id) t.aiMove = move.move_data;
+
+      const rawLines = String(move.board_state || '')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .filter(l => !/^turn\s+\d+$/i.test(l));
+
+      for (const line of rawLines) {
+        const event = readableEvent(line, safeP1Name, safeP2Name);
+        if (event && !t.events.includes(event)) {
+          t.events.push(event);
+        }
+      }
+    }
+    return Array.from(byTurn.values()).sort((a, b) => a.turn - b.turn);
+  }, [safeMoves, safeP1Id, safeP2Id, safeP1Name, safeP2Name]);
+
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-yellow-400">
       <div className="text-center">
@@ -201,6 +279,13 @@ export default function PokemonBattle() {
   const p1Active = match.battle?.p1_pokemon?.find(p => p.active);
   const p2Active = match.battle?.p2_pokemon?.find(p => p.active);
   const battleOver = match.status === 'completed' || match.battle?.winner;
+  const duration = formatDuration(match.started_at, match.finished_at);
+  const winnerName =
+    match.winner_id === match.player1_id
+      ? match.p1_name
+      : match.winner_id === match.player2_id
+        ? match.p2_name
+        : (match.battle?.winner === 'Player 1' ? match.p1_name : match.battle?.winner === 'Player 2' ? match.p2_name : null);
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -226,9 +311,12 @@ export default function PokemonBattle() {
 
       {/* Winner Banner */}
       {battleOver && (match.battle?.winner || match.status === 'completed') && (
-        <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3 mb-4 text-center">
-          <div className="text-yellow-300 font-bold text-lg">
-            🏆 {match.battle?.winner || 'Battle Ended'}
+        <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3 mb-4">
+          <div className="text-yellow-300 font-bold text-lg text-center">
+            {winnerName ? `Winner: ${winnerName}` : 'Battle Ended'}
+          </div>
+          <div className="text-xs text-yellow-100/80 mt-1 text-center">
+            {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? 'Win by timeout' : 'Completed'} · Duration {duration}
           </div>
         </div>
       )}
@@ -275,8 +363,19 @@ export default function PokemonBattle() {
           </div>
         </div>
       ) : (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 mb-4 text-center text-gray-500">
-          Battle state not available (may have ended)
+        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 mb-4 text-center">
+          {match.status === 'completed' ? (
+            <>
+              <div className="text-yellow-300 font-semibold">
+                {winnerName ? `Winner: ${winnerName}` : 'Battle completed'}
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? 'Win by timeout' : 'Completed'} · Duration {duration}
+              </div>
+            </>
+          ) : (
+            <div className="text-gray-500">Battle state is temporarily unavailable</div>
+          )}
         </div>
       )}
 
@@ -285,19 +384,32 @@ export default function PokemonBattle() {
         <div className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2">Battle Log</div>
         <div
           ref={logRef}
-          className="h-40 overflow-y-auto font-mono text-xs space-y-0.5 text-gray-300"
+          className="h-56 overflow-y-auto font-mono text-xs space-y-3 text-gray-300"
         >
-          {match.moves && match.moves.length > 0 ? (
-            match.moves.map((m, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="text-gray-600 shrink-0">T{m.move_number}</span>
-                <span className={m.move_data.includes('|') ? 'text-blue-300' : 'text-gray-300'}>
-                  {(m.board_state || m.move_data).length > 120 ? (m.board_state || m.move_data).slice(0, 120) + '…' : (m.board_state || m.move_data)}
-                </span>
+          {turnLogs.length > 0 ? (
+            turnLogs.map((t) => (
+              <div key={t.turn} className="border border-gray-800 rounded-md p-2.5 bg-gray-950/60">
+                <div className="text-yellow-300 font-semibold mb-1">Turn {t.turn}</div>
+                <div className="space-y-1">
+                  <div className="flex gap-2">
+                    <span className="text-gray-600">-</span>
+                    <span><span className="text-blue-300">{match.p1_name}</span> {t.playerMove || '...'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-gray-600">-</span>
+                    <span><span className="text-purple-300">{match.p2_name}</span> {t.aiMove || '...'}</span>
+                  </div>
+                  {t.events.map((e, i) => (
+                    <div key={i} className="flex gap-2 pl-3">
+                      <span className="text-gray-700">•</span>
+                      <span className="text-gray-400">{e}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))
           ) : (
-            <div className="text-gray-600 italic">No moves yet...</div>
+            <div className="text-gray-600 italic">No turns yet...</div>
           )}
         </div>
       </div>
