@@ -324,8 +324,8 @@ export default function PokemonBattle() {
         <div className="text-sm text-gray-600 text-right">#{matchId?.slice(0, 8)}</div>
       </div>
 
-      {/* Winner Banner (only when live battle state is present) */}
-      {displayedBattle && battleOver && (displayedBattle?.winner || match.status === 'completed') && (
+      {/* Winner Banner - shows when match is over (including timeout) */}
+      {battleOver && (match.status === 'completed') && (
         <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3 mb-4">
           <div className="text-yellow-300 font-bold text-lg text-center">
             {winnerName ? `Winner: ${winnerName}` : 'Battle Ended'}
