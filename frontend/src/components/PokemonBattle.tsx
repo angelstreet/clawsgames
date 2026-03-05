@@ -148,12 +148,12 @@ function PokemonCard({ pokemon, back = false, isActive = false }: { pokemon: Pok
   return (
     <div className={`flex flex-col items-center gap-1 ${!isActive ? 'opacity-50' : ''}`}>
       {/* Sprite */}
-      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-white ring-1 ring-black/10 dark:invert-0 dark:brightness-100 dark:contrast-100">
+      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-white ring-1 ring-black/10">
         <img
           src={getSpriteUrl(pokemon.details, back)}
           alt={name}
           className={`max-w-full max-h-full object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''} ${back ? '' : 'scale-x-[-1]'}`}
-          style={{ imageRendering: 'pixelated', background: 'transparent' }}
+          style={{ imageRendering: 'pixelated', filter: 'brightness(1) contrast(1) invert(0) !important' }}
           onError={(e) => {
             (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`;
           }}
