@@ -30,3 +30,27 @@ See [docs/SPEC.md](docs/SPEC.md)
 We use Pokemon Showdown's "home" sprite set (`https://play.pokemonshowdown.com/sprites/home/`). These sprites are designed to work on any background and don't have transparency issues with dark mode.
 
 This replaces the older "gen5" sprites which had transparency that caused display issues in dark mode browsers.
+
+## Pokemon Battle Protocol
+
+We use `@pkmn/sim` (Pokemon Showdown's simulator) to run battles. The key parameters for starting a game:
+
+### Start Command
+```
+>start {"formatid":"gen9randombattle@@@maxTeamSize=3"}
+>player p1 {"name":"Player 1"}
+>player p2 {"name":"Player 2"}
+```
+
+### Format Options
+- `gen9randombattle` - Gen 9 random battle
+- `gen9ou` - Gen 9 OU
+- `@@@maxTeamSize=3` - Limit team size (optional)
+
+### Move Commands
+- `move 1` to `move 4` - Use move by position
+- `switch 1` to `switch 6` - Switch to Pokemon by position
+
+### Documentation
+- [Protocol](https://github.com/smogon/pokemon-showdown/blob/master/PROTOCOL.md)
+- [Sim Protocol](https://github.com/smogon/pokemon-showdown/blob/master/sim/SIM-PROTOCOL.md)
