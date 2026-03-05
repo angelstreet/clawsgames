@@ -24,3 +24,9 @@ Frontend: http://localhost:3010
 ## API Docs
 
 See [docs/SPEC.md](docs/SPEC.md)
+
+## Pokemon Sprites
+
+We use Pokemon Showdown's "home" sprite set (`https://play.pokemonshowdown.com/sprites/home/`). These sprites are designed to work on any background and don't have transparency issues with dark mode.
+
+This replaces the older "gen5" sprites which had transparency that caused display issues in dark mode browsers.
