@@ -12,7 +12,7 @@ router.get('/:gameId', (req, res) => {
     WHERE r.game_id = ?
     ORDER BY r.elo DESC
     LIMIT 100
-  `).all(req.params.gameId);
+  `).all(req.params.gameId as string);
   res.json({ rankings });
 });
 

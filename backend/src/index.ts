@@ -36,8 +36,10 @@ app.use('/api/games', matchmakingRouter);
 app.use('/api/matches', matchesRouter);
 app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/solo', soloRouter);
-app.use('/api/games', soloRouter);
+// Mount pokemon router at both /api/pokemon and /api/games/pokemon
 app.use('/api/pokemon', pokemonRouter);
+app.use('/api/games/pokemon', pokemonRouter);
+app.use('/api/games', soloRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'clawsgames', port: PORT });

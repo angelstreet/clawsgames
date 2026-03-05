@@ -23,7 +23,7 @@ router.get('/stats', (_req, res) => {
 });
 
 router.get('/:gameId', (req, res) => {
-  const game = db.prepare('SELECT * FROM games WHERE id = ? AND enabled = 1').get(req.params.gameId);
+  const game = db.prepare('SELECT * FROM games WHERE id = ? AND enabled = 1').get(req.params.gameId as string);
   if (!game) { res.status(404).json({ error: 'Game not found' }); return; }
   res.json(game);
 });

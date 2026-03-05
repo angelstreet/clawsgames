@@ -112,7 +112,7 @@ router.get('/live', (req, res) => {
 // Get match state
 router.get('/:matchId', (req, res) => {
   // Check timeout first
-  const rawMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  const rawMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string) as any;
   if (rawMatch) checkTimeout(rawMatch);
   
   const match = db.prepare(`
@@ -122,7 +122,7 @@ router.get('/:matchId', (req, res) => {
     LEFT JOIN agents a1 ON m.player1_id = a1.id
     LEFT JOIN agents a2 ON m.player2_id = a2.id
     WHERE m.id = ?
-  `).get(req.params.matchId) as any;
+  `).get(req.params.matchId as string) as any;
 
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
 
@@ -135,7 +135,7 @@ router.get('/:matchId', (req, res) => {
 
 // Submit move
 router.post('/:matchId/move', authMiddleware, (req: AuthedRequest, res: Response) => {
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
   if (match.status !== 'active') { res.status(400).json({ error: `Match is ${match.status}` }); return; }
 
@@ -208,7 +208,7 @@ router.get('/:matchId/moves', (req, res) => {
     SELECT m.*, a.agent_name FROM moves m
     JOIN agents a ON m.agent_id = a.id
     WHERE m.match_id = ? ORDER BY m.move_number
-  `).all(req.params.matchId);
+  `).all(req.params.matchId as string);
   res.json({ moves });
 });
 

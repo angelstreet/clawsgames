@@ -98,16 +98,16 @@ router.post('/solo', authMiddleware, async (req: AuthedRequest, res: Response) =
 });
 
 router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Response) => {
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
   if (await enforceInactivityTimeout(match)) {
-    const ended = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+    const ended = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string as string) as any;
     res.status(400).json({ error: 'Match timed out', status: ended?.status, result: ended?.result, winner_id: ended?.winner_id });
     return;
   }
   if (match.status !== 'active') { res.status(400).json({ error: `Match is ${match.status}` }); return; }
 
-  const battle = getBattleState(req.params.matchId);
+  const battle = getBattleState(req.params.matchId as string as string);
   if (!battle) { res.status(500).json({ error: 'Battle expired from memory' }); return; }
 
   const playerMove = req.body.move;
@@ -145,23 +145,23 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   }
 
   // Play the turn (both moves at once)
-  const result = await playTurn(req.params.matchId, playerMove, aiCommand);
+  const result = await playTurn(req.params.matchId as string as string, playerMove, aiCommand);
   if (!result.valid) { res.status(400).json({ error: result.error }); return; }
 
   // Record moves with battle log
   db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
-    .run(req.params.matchId, match.player1_id, result.turn, playerMove, result.battleLog || '');
+    .run(req.params.matchId as string as string, match.player1_id, result.turn, playerMove, result.battleLog || '');
   db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
-    .run(req.params.matchId, match.player2_id, result.turn, aiCommand, '');
+    .run(req.params.matchId as string as string, match.player2_id, result.turn, aiCommand, '');
 
   if (result.winner) {
     const winnerId = result.winner === 'Player 1' ? match.player1_id : match.player2_id;
     const matchResult = result.winner === 'Player 1' ? 'player1_win' : result.winner === 'tie' ? 'draw' : 'player2_win';
     db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(winnerId, matchResult, result.turn, req.params.matchId);
+      .run(winnerId, matchResult, result.turn, req.params.matchId as string as string);
 
-    await settleEloAndReport(match, winnerId, matchResult, req.params.matchId);
-    destroyBattle(req.params.matchId);
+    await settleEloAndReport(match, winnerId, matchResult, req.params.matchId as string as string);
+    destroyBattle(req.params.matchId as string as string);
     res.json({
       your_move: playerMove,
       ai_move: aiCommand,
@@ -179,15 +179,15 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   // Hard max-turn cap: decide winner by remaining HP ratio
   const limits = getPokemonLimits();
   if (result.turn >= limits.maxTurns) {
-    const current = getBattleState(req.params.matchId);
+    const current = getBattleState(req.params.matchId as string as string);
     const p1Score = teamHpScore(current?.p1Request?.side?.pokemon || []);
     const p2Score = teamHpScore(current?.p2Request?.side?.pokemon || []);
     const winnerId = p1Score > p2Score ? match.player1_id : p2Score > p1Score ? match.player2_id : null;
     const matchResult = winnerId === match.player1_id ? 'player1_win' : winnerId === match.player2_id ? 'player2_win' : 'draw';
     db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(winnerId, matchResult, result.turn, req.params.matchId);
-    await settleEloAndReport(match, winnerId, matchResult, req.params.matchId);
-    destroyBattle(req.params.matchId);
+      .run(winnerId, matchResult, result.turn, req.params.matchId as string as string);
+    await settleEloAndReport(match, winnerId, matchResult, req.params.matchId as string as string);
+    destroyBattle(req.params.matchId as string as string);
     res.json({
       your_move: playerMove,
       ai_move: aiCommand,
@@ -203,7 +203,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     return;
   }
 
-  db.prepare('UPDATE matches SET move_count = ?, current_turn = 1 WHERE id = ?').run(result.turn, req.params.matchId);
+  db.prepare('UPDATE matches SET move_count = ?, current_turn = 1 WHERE id = ?').run(result.turn, req.params.matchId as string as string);
   res.json({
     your_move: playerMove,
     ai_move: aiCommand,
@@ -216,12 +216,12 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
 });
 
 router.get('/:matchId', async (req, res) => {
-  const base = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  const base = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string as string) as any;
   if (base) await enforceInactivityTimeout(base);
-  const match = db.prepare(`SELECT m.*, a1.agent_name as p1_name, a2.agent_name as p2_name FROM matches m LEFT JOIN agents a1 ON m.player1_id = a1.id LEFT JOIN agents a2 ON m.player2_id = a2.id WHERE m.id = ?`).get(req.params.matchId) as any;
+  const match = db.prepare(`SELECT m.*, a1.agent_name as p1_name, a2.agent_name as p2_name FROM matches m LEFT JOIN agents a1 ON m.player1_id = a1.id LEFT JOIN agents a2 ON m.player2_id = a2.id WHERE m.id = ?`).get(req.params.matchId as string as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
-  const battle = getBattleState(req.params.matchId);
-  const moves = db.prepare('SELECT * FROM moves WHERE match_id = ? ORDER BY move_number').all(req.params.matchId);
+  const battle = getBattleState(req.params.matchId as string as string);
+  const moves = db.prepare('SELECT * FROM moves WHERE match_id = ? ORDER BY move_number').all(req.params.matchId as string as string);
   const limits = getPokemonLimits();
   res.json({
     ...match,

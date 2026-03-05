@@ -23,7 +23,7 @@ router.get('/models', (_req, res) => {
 
 // Start solo match
 router.post('/:gameId/solo', authMiddleware, (req: AuthedRequest, res: Response) => {
-  const gameId = req.params.gameId;
+  const gameId = req.params.gameId as string;
   const engine = getEngine(gameId);
   if (!engine) { res.status(404).json({ error: 'Game not found' }); return; }
 
@@ -65,7 +65,7 @@ router.post('/:gameId/solo', authMiddleware, (req: AuthedRequest, res: Response)
 
 // Make move in solo match (AI auto-responds)
 router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Response) => {
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId) as any;
+  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
   if (match.status !== 'active') { res.status(400).json({ error: `Match is ${match.status}` }); return; }
   if (match.player1_id !== req.agent!.id) { res.status(403).json({ error: 'Not your match' }); return; }
