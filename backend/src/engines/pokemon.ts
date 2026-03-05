@@ -113,7 +113,7 @@ export function formatView(req: any): string {
 export async function createBattle(matchId: string): Promise<{ p1View: string; p2View: string }> {
   const streams = BattleStreams.getPlayerStreams(new BattleStreams.BattleStream());
 
-  streams.omniscient.write('>start {"formatid":"gen9randombattle"}');
+  streams.omniscient.write('>start {"formatid":"gen9randombattle@@@maxTeamSize=3"}');
   streams.omniscient.write('>player p1 {"name":"Player 1"}');
   streams.omniscient.write('>player p2 {"name":"Player 2"}');
 

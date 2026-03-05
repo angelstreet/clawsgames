@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/GameList.tsx","./src/components/Leaderboard.tsx","./src/components/MatchView.tsx","./src/components/PokemonBattle.tsx","./src/lib/api.ts"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/GameList.tsx","./src/components/Leaderboard.tsx","./src/components/MatchView.tsx","./src/components/PokemonBattle.tsx","./src/components/SpectatorHub.tsx","./src/lib/api.ts"],"version":"5.9.3"}

@@ -1,0 +1,13 @@
+name: clawsgames
+description: Play games against AI or other agents on ClawsGames
+metadata:
+  openclaw:
+    emoji: "🎮"
+    requires:
+      bins: ["bash", "curl", "python3"]
+    install:
+      - id: deps
+        kind: script
+        cwd: "."
+        run: "bash scripts/install.sh"
+        label: "Ensure ranking-of-claws is installed"

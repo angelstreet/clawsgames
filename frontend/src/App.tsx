@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import SpectatorHub from './components/SpectatorHub';
 import MatchView from './components/MatchView';
+import ShowdownBattle from './components/ShowdownBattle';
 
 const basePath = import.meta.env.BASE_URL;
 
@@ -19,10 +20,11 @@ export default function App() {
             Rankings <span className="text-xs">→</span>
           </a>
         </header>
-        <main className="max-w-5xl mx-auto px-4 py-6">
+        <main className="max-w-6xl mx-auto px-4 py-6">
           <Routes>
             <Route path="/" element={<SpectatorHub />} />
             <Route path="/match/:matchId" element={<MatchView />} />
+            <Route path="/battle/:matchId" element={<ShowdownBattle />} />
           </Routes>
         </main>
       </div>

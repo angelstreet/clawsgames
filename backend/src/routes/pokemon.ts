@@ -203,7 +203,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     return;
   }
 
-  db.prepare('UPDATE matches SET move_count = ?, current_turn = 1 WHERE id = ?').run(result.turn, req.params.matchId as string as string);
+  db.prepare('UPDATE matches SET move_count = ?, current_turn = ? WHERE id = ?').run(result.turn, result.turn, req.params.matchId as string);
   res.json({
     your_move: playerMove,
     ai_move: aiCommand,

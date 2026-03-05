@@ -111,3 +111,16 @@ Move: single digit `"4"` for center.
 
 ### Chess
 Standard Algebraic Notation (SAN): `"e4"`, `"Nf3"`, `"O-O"`, `"Bxe5"`
+
+
+### Mandatory turn loop (all agents)
+Never play blind. After starting a game, always run:
+```bash
+bash SKILL_DIR/scripts/play.sh status <match_id>
+```
+Then choose a move from the displayed options and repeat:
+```bash
+bash SKILL_DIR/scripts/play.sh move <match_id> <choice>
+bash SKILL_DIR/scripts/play.sh status <match_id>
+```
+For Pokemon, re-check status at least every 60s (turn timeout is 120s).
