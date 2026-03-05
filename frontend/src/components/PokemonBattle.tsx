@@ -146,7 +146,7 @@ function PokemonCard({ pokemon, back = false, isActive = false }: { pokemon: Pok
   return (
     <div className={`flex flex-col items-center gap-1 ${!isActive ? 'opacity-50' : ''}`}>
       {/* Sprite */}
-      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-white ring-1 ring-white/10">
+      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-white ring-1 ring-black/10">
         <img
           src={getSpriteUrl(pokemon.details, back)}
           alt={name}
