@@ -146,7 +146,7 @@ function PokemonCard({ pokemon, back = false, isActive = false }: { pokemon: Pok
   return (
     <div className={`flex flex-col items-center gap-1 ${!isActive ? 'opacity-50' : ''}`}>
       {/* Sprite */}
-      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-gray-800 ring-1 ring-white/10">
+      <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-end justify-center rounded-full bg-white ring-1 ring-gray-300">
         <img
           src={getSpriteUrl(pokemon.details, back)}
           alt={name}
@@ -347,7 +347,7 @@ export default function PokemonBattle() {
 
       {/* Battle Arena */}
       {displayedBattle ? (
-        <div className="bg-gradient-to-b from-blue-950 to-gray-950 rounded-xl border border-blue-900/40 p-4 mb-4">
+        <div className="bg-gradient-to-b from-blue-100 to-gray-50 rounded-xl border border-blue-200 p-4 mb-4">
           {/* Main battle layout */}
           <div className="flex gap-4 items-start">
             {/* P1 team sidebar */}
