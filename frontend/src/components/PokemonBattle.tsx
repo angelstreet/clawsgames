@@ -66,8 +66,10 @@ function toSpriteName(name: string): string {
 function getSpriteUrl(details: string, back = false): string {
   const { name } = parsePokemon(details);
   const spriteName = toSpriteName(name);
+  // Use PNG for back sprites (GIF doesn't exist for back view)
+  const ext = back ? 'png' : 'gif';
   const dir = back ? 'gen5-back' : 'gen5';
-  return `https://play.pokemonshowdown.com/sprites/${dir}/${spriteName}.gif`;
+  return `https://play.pokemonshowdown.com/sprites/${dir}/${spriteName}.${ext}`;
 }
 
 function toMs(dateStr?: string | null): number | null {
