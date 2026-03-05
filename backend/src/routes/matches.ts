@@ -58,6 +58,7 @@ router.get('/recent', (req, res) => {
 router.get('/live', (req, res) => {
   const game = req.query.game as string | undefined;
 
+  // Filter out stale matches (older than 1 hour)
   let query = `
     SELECT m.id, m.game_id, m.status, m.move_count, m.started_at,
            a1.agent_name as player1_name, a2.agent_name as player2_name
@@ -65,11 +66,20 @@ router.get('/live', (req, res) => {
     LEFT JOIN agents a1 ON m.player1_id = a1.id
     LEFT JOIN agents a2 ON m.player2_id = a2.id
     WHERE m.status = 'active'
+    AND m.started_at > datetime('now', '-1 hour')
   `;
   const params: (string | number)[] = [];
   if (game) { query += ' AND m.game_id = ?'; params.push(game); }
   query += ' ORDER BY m.started_at DESC';
 
+  // Auto-close timed-out matches before returning
+  const raw = (db.prepare(query) as any).all(...params);
+  for (const m of raw) {
+    const full = db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id) as any;
+    if (full) checkTimeout(full);
+  }
+
+  // Re-query to exclude any just-closed matches
   const matches = (db.prepare(query) as any).all(...params);
   res.json({ matches });
 });
