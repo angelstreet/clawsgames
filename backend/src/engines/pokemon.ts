@@ -12,6 +12,7 @@ interface BattleInstance {
   winner: string | null;
   turn: number;
   log: string[];
+  rawLog: string[];  // Raw Showdown format log
 }
 
 const battles = new Map<string, BattleInstance>();
@@ -117,7 +118,44 @@ export async function createBattle(matchId: string): Promise<{ p1View: string; p
   streams.omniscient.write('>player p1 {"name":"Player 1"}');
   streams.omniscient.write('>player p2 {"name":"Player 2"}');
 
+  // Drain the omniscient stream to get full initialization data
+  let omniRaw = '';
+  const startTime = Date.now();
+  while (Date.now() - startTime < 2000) {
+    const chunk = await Promise.race([
+      streams.omniscient.read(),
+      new Promise<null>(r => setTimeout(() => r(null), 100))
+    ]);
+    if (chunk === null) break;
+    omniRaw += chunk + '\n';
+    if (omniRaw.includes('|start|')) break;
+  }
+
   const [p1Raw, p2Raw] = await Promise.all([drainStream(streams.p1, 2000), drainStream(streams.p2, 2000)]);
+
+  // Build full battle initialization log in Showdown format
+  const initLines: string[] = [];
+  
+  // Extract player info from omniscient output
+  const player1Line = omniRaw.split('\n').find(l => l.startsWith('|player|p1|'));
+  const player2Line = omniRaw.split('\n').find(l => l.startsWith('|player|p2|'));
+  if (player1Line) initLines.push(player1Line);
+  if (player2Line) initLines.push(player2Line);
+  
+  // Add game type and generation
+  const gametypeLine = omniRaw.split('\n').find(l => l.startsWith('|gametype|'));
+  const genLine = omniRaw.split('\n').find(l => l.startsWith('|gen|'));
+  const tierLine = omniRaw.split('\n').find(l => l.startsWith('|tier|'));
+  if (gametypeLine) initLines.push(gametypeLine);
+  if (genLine) initLines.push(genLine);
+  if (tierLine) initLines.push(tierLine);
+  
+  // Add team info (poke lines)
+  const pokeLines = omniRaw.split('\n').filter(l => l.startsWith('|poke|'));
+  initLines.push(...pokeLines);
+  
+  // Add start
+  initLines.push('|start|');
 
   const battle: BattleInstance = {
     streams,
@@ -126,6 +164,7 @@ export async function createBattle(matchId: string): Promise<{ p1View: string; p
     winner: null,
     turn: 1,
     log: [parseBattleLog(p1Raw)],
+    rawLog: initLines,  // Store full initialization in Showdown format
   };
   battles.set(matchId, battle);
 
@@ -140,12 +179,13 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
   p1View: string;
   p2View: string;
   battleLog: string;
+  rawBattleLog: string;  // Raw Showdown format
   winner: string | null;
   turn: number;
   error?: string;
 }> {
   const battle = battles.get(matchId);
-  if (!battle) return { valid: false, p1View: '', p2View: '', battleLog: '', winner: null, turn: 0, error: 'Battle expired' };
+  if (!battle) return { valid: false, p1View: '', p2View: '', battleLog: '', rawBattleLog: '', winner: null, turn: 0, error: 'Battle expired' };
 
   // Write both moves simultaneously
   battle.streams.p1.write(p1Move);
@@ -165,6 +205,7 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
       p1View: formatView(battle.p1Request),
       p2View: formatView(battle.p2Request),
       battleLog: '',
+      rawBattleLog: '',
       winner: battle.winner,
       turn: battle.turn,
       error,
@@ -188,6 +229,7 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
       p1View: formatView(battle.p1Request),
       p2View: formatView(battle.p2Request),
       battleLog: '',
+      rawBattleLog: '',
       winner: battle.winner,
       turn: battle.turn,
       error: 'No battle progress for this action. If your active Pokemon fainted, you must switch.',
@@ -202,12 +244,14 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
     battle.turn++;
   }
   battle.log.push(log);
+  battle.rawLog.push(combinedRaw);  // Store raw Showdown format
 
   return {
     valid: true,
     p1View: formatView(battle.p1Request),
     p2View: formatView(battle.p2Request),
     battleLog: log,
+    rawBattleLog: combinedRaw,  // Return raw Showdown format
     winner: battle.winner,
     turn: battle.turn,
   };
@@ -215,6 +259,11 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
 
 export function getBattleState(matchId: string) {
   return battles.get(matchId) || null;
+}
+
+export function getRawBattleLog(matchId: string): string[] {
+  const battle = battles.get(matchId);
+  return battle?.rawLog || [];
 }
 
 export function destroyBattle(matchId: string) {
