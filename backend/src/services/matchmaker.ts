@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { v4 as uuid } from 'uuid';
 import { getEngine } from '../engines/index.js';
+import { createBattle } from '../engines/pokemon.js';
 
 export function joinQueue(gameId: string, agentId: number): { status: 'matched' | 'waiting'; match_id?: string; position?: number } {
   // Check if already in queue
@@ -32,6 +33,11 @@ export function joinQueue(gameId: string, agentId: number): { status: 'matched' 
     // Init ratings
     for (const pid of [p1, p2]) {
       db.prepare('INSERT OR IGNORE INTO ratings (agent_id, game_id) VALUES (?, ?)').run(pid, gameId);
+    }
+
+    // For Pokemon games, initialize the Showdown battle
+    if (gameId === 'pokemon') {
+      createBattle(matchId);
     }
 
     return { status: 'matched', match_id: matchId };
@@ -69,5 +75,11 @@ export function joinChallenge(sessionId: string, agentId: number): { match_id: s
     WHERE id = ?
   `).run(agentId, sessionId);
   db.prepare('INSERT OR IGNORE INTO ratings (agent_id, game_id) VALUES (?, ?)').run(agentId, match.game_id);
+
+  // For Pokemon games, initialize the Showdown battle
+  if (match.game_id === 'pokemon') {
+    createBattle(sessionId);
+  }
+
   return { match_id: sessionId };
 }
