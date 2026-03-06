@@ -14,6 +14,19 @@ import matchesRouter from './routes/matches.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import soloRouter from './routes/solo.js';
 import pokemonRouter from './routes/pokemon.js';
+import db from './db/index.js';
+
+// Cleanup stale matches (active >1 hour = timeout)
+function cleanupStaleMatches() {
+  const result = db.prepare(`
+    UPDATE matches 
+    SET status = 'completed', result = 'timeout', finished_at = datetime('now')
+    WHERE status = 'active' AND started_at < datetime('now', '-1 hour')
+  `).run();
+  if (result.changes > 0) {
+    console.log(`🧹 Cleaned up ${result.changes} stale matches`);
+  }
+}
 
 const app = express();
 app.set('trust proxy', 1);
@@ -47,6 +60,10 @@ app.get('/health', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🎮 ClawsGames API running on port ${PORT}`);
+  
+  // Clean up stale matches on startup and every 5 minutes
+  cleanupStaleMatches();
+  setInterval(cleanupStaleMatches, 5 * 60 * 1000);
 });
 
 export default app;

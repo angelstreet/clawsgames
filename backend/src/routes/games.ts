@@ -13,7 +13,7 @@ router.get('/stats', (_req, res) => {
   const stats = db.prepare(`
     SELECT g.id, g.name,
       COUNT(CASE WHEN m.status = 'completed' THEN 1 END) as total_played,
-      COUNT(CASE WHEN m.status = 'active' THEN 1 END) as live_count
+      COUNT(CASE WHEN m.status = 'active' AND m.started_at > datetime('now', '-1 hour') THEN 1 END) as live_count
     FROM games g
     LEFT JOIN matches m ON m.game_id = g.id
     WHERE g.enabled = 1

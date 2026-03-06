@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import SpectatorHub from './components/SpectatorHub';
 import MatchView from './components/MatchView';
 import ShowdownBattle from './components/ShowdownBattle';
+import LiveBattle from './components/LiveBattle';
 
 const basePath = import.meta.env.BASE_URL;
 
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/" element={<SpectatorHub />} />
             <Route path="/match/:matchId" element={<MatchView />} />
             <Route path="/battle/:matchId" element={<ShowdownBattle />} />
+            <Route path="/live/:matchId" element={<LiveBattle />} />
           </Routes>
         </main>
       </div>

@@ -18,6 +18,22 @@ export default defineConfig({
         target: 'http://localhost:5010',
         rewrite: (path) => path.replace('/clawsgames/api', '/api'),
       }
-    }
-  }
+    },
+    fs: {
+      allow: ['..'],
+    },
+    hmr: {
+      overlay: false,
+    },
+  },
+  optimizeDeps: {
+    include: [],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
 })

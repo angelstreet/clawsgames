@@ -1,13 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
-interface Move {
-  id: number;
-  move_number: number;
-  move_data: string;
-  board_state: string;
-}
-
 interface Match {
   id: string;
   p1_name: string;
@@ -27,20 +20,25 @@ export default function ShowdownBattle() {
   const [match, setMatch] = useState<Match | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [battleLog, setBattleLog] = useState<string>('');
   const initialized = useRef(false);
 
   useEffect(() => {
     if (!matchId || initialized.current) return;
     
-    fetch(`/api/pokemon/${matchId}`)
-      .then(res => res.json())
-      .then(data => {
-        setMatch(data);
+    // Fetch both match data and raw battle log in parallel
+    Promise.all([
+      fetch(`/api/pokemon/${matchId}`).then(res => res.json()),
+      fetch(`/api/pokemon/${matchId}/log`).then(res => res.json()).catch(() => ({ log: '' }))
+    ])
+      .then(([matchData, logData]) => {
+        setMatch(matchData);
+        setBattleLog(logData.log || '');
         initialized.current = true;
         setLoading(false);
         
         // Initialize after a short delay to ensure Battle.js is loaded
-        setTimeout(() => initializeBattle(data), 500);
+        setTimeout(() => initializeBattle(matchData, logData.log || ''), 500);
       })
       .catch(err => {
         console.error('Failed to load match:', err);
@@ -49,60 +47,65 @@ export default function ShowdownBattle() {
       });
   }, [matchId]);
 
-  const initializeBattle = (matchData: Match) => {
+  const initializeBattle = (matchData: Match, rawLog: string) => {
     // @ts-ignore - Showdown global
     const BattleClass = (window as any).Battle;
     if (!BattleClass) {
       console.error('Battle not loaded yet, retrying...');
-      setTimeout(() => initializeBattle(matchData), 1000);
+      setTimeout(() => initializeBattle(matchData, rawLog), 1000);
       return;
     }
 
-    // Build the battle log in Showdown format
-    let battleLog = '';
+    let battleLogText = '';
     
-    // Add player info
-    battleLog += `|player|p1|${matchData.p1_name}|50|1500\n`;
-    battleLog += `|player|p2|${matchData.p2_name}|50|1500\n`;
-    battleLog += `|gametype|singles\n`;
-    battleLog += `|gen|9\n`;
-    battleLog += `|tier|ClawsGames Battle\n`;
-    battleLog += `|clearpoke\n`;
-    
-    // Add teams from the battle state if available
-    if (matchData.battle) {
-      const p1Team = (matchData as any).p1_pokemon || (matchData.battle as any).p1_pokemon;
-      const p2Team = (matchData as any).p2_pokemon || (matchData.battle as any).p2_pokemon;
+    // If we have raw log from API, use it directly
+    if (rawLog) {
+      battleLogText = rawLog;
+    } else {
+      // Fallback: build manually from match data (for backwards compatibility)
+      // Add player info
+      battleLogText += `|player|p1|${matchData.p1_name}|50|1500\n`;
+      battleLogText += `|player|p2|${matchData.p2_name}|50|1500\n`;
+      battleLogText += `|gametype|singles\n`;
+      battleLogText += `|gen|9\n`;
+      battleLogText += `|tier|ClawsGames Battle\n`;
+      battleLogText += `|clearpoke\n`;
       
-      if (p1Team) {
-        p1Team.forEach((p: any) => {
-          battleLog += `|poke|p1|${p.details}|${p.item || ''}\n`;
-        });
+      // Add teams from the battle state if available
+      if (matchData.battle) {
+        const p1Team = (matchData as any).p1_pokemon || (matchData.battle as any).p1_pokemon;
+        const p2Team = (matchData as any).p2_pokemon || (matchData.battle as any).p2_pokemon;
+        
+        if (p1Team) {
+          p1Team.forEach((p: any) => {
+            battleLogText += `|poke|p1|${p.details}|${p.item || ''}\n`;
+          });
+        }
+        if (p2Team) {
+          p2Team.forEach((p: any) => {
+            battleLogText += `|poke|p2|${p.details}|${p.item || ''}\n`;
+          });
+        }
       }
-      if (p2Team) {
-        p2Team.forEach((p: any) => {
-          battleLog += `|poke|p2|${p.details}|${p.item || ''}\n`;
-        });
-      }
-    }
-    
-    battleLog += `|start\n`;
+      
+      battleLogText += `|start\n`;
 
-    // Add all moves from the moves array
-    const movesData = (matchData as any).moves || [];
-    for (const move of movesData) {
-      if (move.board_state) {
-        battleLog += move.board_state + '\n';
+      // Add all moves from the moves array
+      const movesData = (matchData as any).moves || [];
+      for (const move of movesData) {
+        if (move.board_state) {
+          battleLogText += move.board_state + '\n';
+        }
       }
-    }
 
-    // Add winner if game over
-    if (matchData.status === 'completed') {
-      const winner = matchData.battle?.winner || '';
-      if (winner === 'Player 1') {
-        battleLog += `|win|${matchData.p1_name}\n`;
-      } else if (winner === 'Player 2') {
-        battleLog += `|win|${matchData.p2_name}\n`;
+      // Add winner if game over
+      if (matchData.status === 'completed') {
+        const winner = matchData.battle?.winner || '';
+        if (winner === 'Player 1') {
+          battleLogText += `|win|${matchData.p1_name}\n`;
+        } else if (winner === 'Player 2') {
+          battleLogText += `|win|${matchData.p2_name}\n`;
+        }
       }
     }
 
@@ -116,7 +119,7 @@ export default function ShowdownBattle() {
           id: matchId || 'battle',
           $frame: battleContainer,
           $logFrame: logContainer,
-          log: battleLog.split('\n'),
+          log: battleLogText.split('\n'),
           isReplay: true,
           paused: true,
           autoresize: true

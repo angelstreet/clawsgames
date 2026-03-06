@@ -178,12 +178,20 @@ export default function SpectatorHub() {
                   <div className="truncate text-white">{m.player2_name}</div>
                 </div>
                 <div className="text-xs text-gray-500">Move {m.move_count}</div>
-                <button
-                  onClick={() => navigate(`/match/${m.id}`)}
-                  className="mt-auto w-full bg-red-500 hover:bg-red-400 text-white text-xs font-bold py-2 rounded-lg transition-colors"
-                >
-                  👁 Watch
-                </button>
+                <div className="mt-auto flex gap-1">
+                  <button
+                    onClick={() => navigate(`/live/${m.id}`)}
+                    className="flex-1 bg-red-500 hover:bg-red-400 text-white text-xs font-bold py-2 rounded-lg transition-colors"
+                  >
+                    🔴 Live
+                  </button>
+                  <button
+                    onClick={() => navigate(`/battle/${m.id}`)}
+                    className="flex-1 bg-blue-500 hover:bg-blue-400 text-white text-xs font-bold py-2 rounded-lg transition-colors"
+                  >
+                    📺 Replay
+                  </button>
+                </div>
               </div>
             ))}
           </div>

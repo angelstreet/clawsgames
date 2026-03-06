@@ -90,3 +90,10 @@ try {
   // Column already exists
 }
 db.exec("UPDATE games SET max_turns = 50 WHERE id = 'pokemon'");
+
+// Migration: add raw_battle_log column to moves table
+try {
+  db.exec("ALTER TABLE moves ADD COLUMN raw_battle_log TEXT");
+} catch (e: any) {
+  // Column already exists
+}
