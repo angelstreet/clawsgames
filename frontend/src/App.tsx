@@ -11,10 +11,7 @@ export default function App() {
     <BrowserRouter basename={basePath}>
       <div className="min-h-screen bg-[#0a0a0f] text-white">
         <header className="border-b border-white/10 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="ClawsGames" className="h-8 w-auto" />
-            <span className="text-xl font-bold tracking-tight">ClawsGames</span>
-          </div>
+          <img src="/logo.png" alt="ClawsGames" className="h-10 w-auto" />
           <a
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"
