@@ -480,41 +480,71 @@ export default function PokemonBattle() {
       {/* Battle Arena */}
       {displayedBattle ? (
         <div className="bg-gradient-to-b from-blue-950 to-gray-950 rounded-xl border border-blue-900/40 p-4 mb-4">
-          {/* Main battle layout */}
-          <div className="flex gap-4 items-start">
-            {/* P1 team sidebar */}
-            <div className="hidden sm:block w-28 shrink-0">
-              <TeamSidebar label={match.p1_name} pokemons={displayedBattle.p1_pokemon} />
+          {/* Active Pokemon row */}
+          <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-4">
+            {/* P1 active */}
+            <div className="order-2 sm:order-1 flex flex-col items-center gap-3">
+              {p1Active && <PokemonCard pokemon={p1Active} back={false} isActive />}
+              {/* P1 bench */}
+              {displayedBattle.p1_pokemon.filter(p => !p.active).length > 0 && (
+                <div className="flex gap-2 justify-center">
+                  {displayedBattle.p1_pokemon.filter(p => !p.active).map((p, i) => {
+                    const { name } = parsePokemon(p.details);
+                    const { fainted } = parseHp(p.condition || p.hp);
+                    const pct = hpPercent(p.condition || p.hp);
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5">
+                        <div className="relative w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                          <img
+                            src={getSpriteUrl(p.details)}
+                            alt={name}
+                            className={`w-9 h-9 object-contain pixelated scale-x-[-1] ${fainted ? 'grayscale opacity-40' : ''}`}
+                            style={{ imageRendering: 'pixelated' }}
+                            onError={(e) => { (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`; }}
+                          />
+                          {fainted && <span className="absolute bottom-0 right-0 text-[8px] bg-red-700 text-white rounded px-0.5">FNT</span>}
+                        </div>
+                        <div className="text-[10px] text-gray-400 truncate max-w-[40px] text-center">{name}</div>
+                        {!fainted && <div className="text-[9px] text-green-400">{pct}%</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Battle field */}
-            <div className="flex-1">
-              {/* Pokemon sprites - stack on mobile, side by side on desktop */}
-              <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-4">
-                {/* P1 Pokemon */}
-                <div className="order-2 sm:order-1">
-                  {p1Active && <PokemonCard pokemon={p1Active} back={false} isActive />}
+            {/* VS divider */}
+            <div className="order-1 sm:order-2 text-2xl font-black text-yellow-500/60 shrink-0">VS</div>
+
+            {/* P2 active */}
+            <div className="order-3 flex flex-col items-center gap-3">
+              {p2Active && <PokemonCard pokemon={p2Active} back={true} isActive />}
+              {/* P2 bench */}
+              {displayedBattle.p2_pokemon.filter(p => !p.active).length > 0 && (
+                <div className="flex gap-2 justify-center">
+                  {displayedBattle.p2_pokemon.filter(p => !p.active).map((p, i) => {
+                    const { name } = parsePokemon(p.details);
+                    const { fainted } = parseHp(p.condition || p.hp);
+                    const pct = hpPercent(p.condition || p.hp);
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5">
+                        <div className="relative w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                          <img
+                            src={getSpriteUrl(p.details)}
+                            alt={name}
+                            className={`w-9 h-9 object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''}`}
+                            style={{ imageRendering: 'pixelated' }}
+                            onError={(e) => { (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`; }}
+                          />
+                          {fainted && <span className="absolute bottom-0 right-0 text-[8px] bg-red-700 text-white rounded px-0.5">FNT</span>}
+                        </div>
+                        <div className="text-[10px] text-gray-400 truncate max-w-[40px] text-center">{name}</div>
+                        {!fainted && <div className="text-[9px] text-green-400">{pct}%</div>}
+                      </div>
+                    );
+                  })}
                 </div>
-
-                {/* VS divider */}
-                <div className="order-1 sm:order-2 text-2xl font-black text-yellow-500/60 shrink-0">VS</div>
-
-                {/* P2 Pokemon */}
-                <div className="order-3">
-                  {p2Active && <PokemonCard pokemon={p2Active} back={true} isActive />}
-                </div>
-              </div>
-
-              {/* Mobile team displays */}
-              <div className="flex sm:hidden justify-between gap-2 mt-3 px-2">
-                <TeamSidebar label={match.p1_name} pokemons={displayedBattle.p1_pokemon} />
-                <TeamSidebar label={match.p2_name} pokemons={displayedBattle.p2_pokemon} isP2 />
-              </div>
-            </div>
-
-            {/* P2 team sidebar */}
-            <div className="hidden sm:block w-28 shrink-0">
-              <TeamSidebar label={match.p2_name} pokemons={displayedBattle.p2_pokemon} isP2 />
+              )}
             </div>
           </div>
         </div>
