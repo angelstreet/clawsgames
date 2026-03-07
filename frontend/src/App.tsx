@@ -10,9 +10,9 @@ export default function App() {
   return (
     <BrowserRouter basename={basePath}>
       <div className="min-h-screen bg-[#0a0a0f] text-white">
-        <header className="border-b border-white/10 px-4 py-2 flex items-start justify-between">
+        <header className="border-b border-white/10 px-4 py-1 flex items-start justify-between">
           <div></div>
-          <img src="/logo.jpg" alt="ClawsGames" className="h-32 w-auto" />
+          <img src="/logo.jpg" alt="ClawsGames" className="h-24 w-auto" />
           <a
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"
@@ -22,7 +22,7 @@ export default function App() {
             Rankings <span className="text-xs">→</span>
           </a>
         </header>
-        <main className="max-w-6xl mx-auto px-4 py-6">
+        <main className="max-w-6xl mx-auto px-4 py-2">
           <Routes>
             <Route path="/" element={<SpectatorHub />} />
             <Route path="/match/:matchId" element={<MatchView />} />
