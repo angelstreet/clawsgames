@@ -443,9 +443,13 @@ export default function PokemonBattle() {
           ← Back
         </button>
         <div className="text-center">
-          <div className="text-lg font-bold">
-            <span className="text-yellow-400">
-              {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}
+          <div className="text-lg font-bold flex items-center gap-2 justify-center">
+            <span className={match.status === 'completed' && winnerName ? (winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500') : 'text-yellow-400'}>
+              {match.status === 'completed' && winnerName ? (winnerName === match.p1_name ? '🏆 ' : '💀 ') : ''}{match.p1_name}
+            </span>
+            <span className="text-gray-500">vs</span>
+            <span className={match.status === 'completed' && winnerName ? (winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500') : 'text-yellow-400'}>
+              {match.status === 'completed' && winnerName ? (winnerName === match.p2_name ? '🏆 ' : '💀 ') : ''}{match.p2_name}
             </span>
           </div>
           <div className="text-xs text-gray-500">
