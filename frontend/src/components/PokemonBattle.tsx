@@ -544,7 +544,19 @@ export default function PokemonBattle() {
             </div>
 
             {/* VS divider */}
-            <div className="order-1 sm:order-2 text-2xl font-black text-yellow-500/60 shrink-0">VS</div>
+            <div className="order-1 sm:order-2 shrink-0 flex flex-col items-center gap-1">
+              <div className="text-2xl font-black text-yellow-500/60">VS</div>
+              {match.status === 'completed' && winnerName && (
+                <div className="flex flex-col items-center text-[11px] font-bold leading-tight">
+                  <span className={winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}>
+                    {winnerName === match.p1_name ? '🏆' : '💀'} {match.p1_name}
+                  </span>
+                  <span className={winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}>
+                    {winnerName === match.p2_name ? '🏆' : '💀'} {match.p2_name}
+                  </span>
+                </div>
+              )}
+            </div>
 
             {/* P2 active */}
             <div className="order-3 flex flex-col items-center gap-3">
@@ -577,18 +589,6 @@ export default function PokemonBattle() {
               )}
             </div>
           </div>
-          {/* Winner/loser names side by side */}
-          {match.status === 'completed' && winnerName && (
-            <div className="flex justify-center items-center gap-3 mt-3 text-xs font-bold">
-              <span className={winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}>
-                {winnerName === match.p1_name ? '🏆' : '💀'} {match.p1_name}
-              </span>
-              <span className="text-gray-600">vs</span>
-              <span className={winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}>
-                {winnerName === match.p2_name ? '🏆' : '💀'} {match.p2_name}
-              </span>
-            </div>
-          )}
         </div>
       ) : (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 mb-4 text-center">
