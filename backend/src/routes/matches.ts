@@ -4,6 +4,7 @@ import db from '../db/index.js';
 import { authMiddleware, AuthedRequest } from '../middleware/auth.js';
 import { getEngine } from '../engines/index.js';
 import { calculateElo } from '../services/elo.js';
+import { createBattle, playTurn, getBattleState, getRawBattleLog, destroyBattle } from '../engines/pokemon.js';
 import type { Response } from 'express';
 
 const router = Router();
@@ -134,7 +135,7 @@ router.get('/:matchId', (req, res) => {
 });
 
 // Submit move
-router.post('/:matchId/move', authMiddleware, (req: AuthedRequest, res: Response) => {
+router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Response) => {
   const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
   if (match.status !== 'active') { res.status(400).json({ error: `Match is ${match.status}` }); return; }
@@ -143,6 +144,80 @@ router.post('/:matchId/move', authMiddleware, (req: AuthedRequest, res: Response
   const playerNum = match.player1_id === agentId ? 1 : match.player2_id === agentId ? 2 : 0;
   if (playerNum === 0) { res.status(403).json({ error: 'You are not in this match' }); return; }
   if (match.current_turn !== playerNum) { res.status(400).json({ error: 'Not your turn' }); return; }
+
+  // Pokemon: route through Showdown engine (turn-based buffering: P1 stores move, P2 triggers playTurn)
+  if (match.game_id === 'pokemon') {
+    const playerMove = req.body.move;
+    const moveNumber = match.move_count + 1;
+
+    if (playerNum === 1) {
+      // P1 stores their move; P2 will trigger the actual battle turn
+      db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
+        .run(match.id, agentId, moveNumber, playerMove, '{}');
+      db.prepare('UPDATE matches SET move_count = ?, current_turn = 2 WHERE id = ?').run(moveNumber, match.id);
+      res.json({ valid: true, status: 'active', current_turn: 2, message: 'Move recorded, waiting for opponent' });
+      return;
+    }
+
+    // P2: find P1's pending move and process both simultaneously
+    const p1Move = db.prepare(
+      'SELECT * FROM moves WHERE match_id = ? AND agent_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(match.id, match.player1_id) as any;
+    if (!p1Move) { res.status(400).json({ error: 'Waiting for P1 move first' }); return; }
+
+    // Ensure battle is in memory (may have been lost on server restart)
+    let battle = getBattleState(match.id);
+    if (!battle) {
+      try { await createBattle(match.id); battle = getBattleState(match.id); } catch {}
+      if (!battle) { res.status(500).json({ error: 'Battle expired from memory' }); return; }
+    }
+
+    let result = await playTurn(match.id, p1Move.move_data, playerMove);
+    if (!result.valid) { res.status(400).json({ error: result.error }); return; }
+
+    const rawLog = getRawBattleLog(match.id);
+    const initLog = rawLog && rawLog.length > 0 ? rawLog.join('\n') + '\n' : '';
+    const combinedLog = initLog + (result.rawBattleLog || '');
+
+    // Update P1's pending move with real board_state and raw log
+    db.prepare('UPDATE moves SET board_state = ?, raw_battle_log = ? WHERE id = ?')
+      .run(result.battleLog || '', combinedLog, p1Move.id);
+    // Insert P2's move
+    db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state, raw_battle_log) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(match.id, agentId, moveNumber + 1, playerMove, '', combinedLog);
+
+    if (result.winner) {
+      const winnerId = result.winner === 'Player 1' ? match.player1_id : match.player2_id;
+      const matchResult = result.winner === 'tie' ? 'draw' : (result.winner === 'Player 1' ? 'player1_win' : 'player2_win');
+      db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(winnerId, matchResult, result.turn, match.id);
+
+      const r1 = db.prepare('SELECT elo FROM ratings WHERE agent_id=? AND game_id=?').get(match.player1_id, 'pokemon') as any;
+      const r2 = db.prepare('SELECT elo FROM ratings WHERE agent_id=? AND game_id=?').get(match.player2_id, 'pokemon') as any;
+      if (r1 && r2) {
+        const score1 = winnerId === match.player1_id ? 1 : winnerId === match.player2_id ? 0 : 0.5;
+        const { newA, newB } = calculateElo(r1.elo, r2.elo, score1);
+        const w1 = score1 === 1 ? 'wins' : score1 === 0 ? 'losses' : 'draws';
+        const w2 = score1 === 0 ? 'wins' : score1 === 1 ? 'losses' : 'draws';
+        db.prepare(`UPDATE ratings SET elo=?, ${w1}=${w1}+1 WHERE agent_id=? AND game_id=?`).run(newA, match.player1_id, 'pokemon');
+        db.prepare(`UPDATE ratings SET elo=?, ${w2}=${w2}+1 WHERE agent_id=? AND game_id=?`).run(newB, match.player2_id, 'pokemon');
+      }
+
+      // Save final state
+      const finalBattle = getBattleState(match.id);
+      if (finalBattle) {
+        const finalState = JSON.stringify({ turn: finalBattle.turn, winner: finalBattle.winner, p1_pokemon: finalBattle.p1Request?.side?.pokemon, p2_pokemon: finalBattle.p2Request?.side?.pokemon });
+        db.prepare('UPDATE matches SET board_state=? WHERE id=?').run(finalState, match.id);
+      }
+      destroyBattle(match.id);
+      res.json({ valid: true, status: 'completed', result: matchResult, winner: result.winner, turn: result.turn });
+      return;
+    }
+
+    db.prepare('UPDATE matches SET move_count=?, current_turn=1 WHERE id=?').run(result.turn, match.id);
+    res.json({ valid: true, status: 'active', current_turn: 1, battle_log: result.battleLog, turn: result.turn });
+    return;
+  }
 
   const engine = getEngine(match.game_id);
   if (!engine) { res.status(500).json({ error: 'Engine not found' }); return; }

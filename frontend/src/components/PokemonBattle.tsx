@@ -416,7 +416,7 @@ export default function PokemonBattle() {
 
   if (!match) return <p className="text-red-400">Match not found.</p>;
 
-  const displayedBattle = match.battle || (match.status === 'completed' ? lastBattle : null);
+  const displayedBattle = (match.battle?.p1_pokemon ? match.battle : null) || (match.status === 'completed' ? lastBattle : null);
   const p1Active = displayedBattle?.p1_pokemon?.find(p => p.active);
   const p2Active = displayedBattle?.p2_pokemon?.find(p => p.active);
   const battleOver = match.status === 'completed' || displayedBattle?.winner;
