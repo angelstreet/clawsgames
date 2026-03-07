@@ -236,7 +236,11 @@ export default function PokemonBattle() {
   const [match, setMatch] = useState<MatchData | null>(null);
   const [lastBattle, setLastBattle] = useState<BattleState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showReplay, setShowReplay] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const battleInstanceRef = useRef<any>(null);
+  const replayContainerRef = useRef<HTMLDivElement>(null);
 
   const handleBack = () => {
     const idx = window.history.state?.idx ?? 0;
@@ -246,6 +250,66 @@ export default function PokemonBattle() {
     }
     navigate('/', { replace: true });
   };
+
+  const destroyBattle = () => {
+    if (battleInstanceRef.current) {
+      try { battleInstanceRef.current.destroy?.(); } catch {}
+      battleInstanceRef.current = null;
+    }
+  };
+
+  const initReplay = async (retries = 10) => {
+    const BattleClass = (window as any).Battle;
+    const $ = (window as any).$;
+    if (!BattleClass || !$) {
+      if (retries > 0) {
+        setTimeout(() => initReplay(retries - 1), 500);
+      } else {
+        console.error('Showdown scripts failed to load');
+      }
+      return;
+    }
+    const logData = await fetch(apiUrl(`/api/pokemon/${matchId}/log`))
+      .then(r => r.json())
+      .catch(() => ({ log: '' }));
+    destroyBattle();
+    const frame = document.getElementById('inline-battle-frame');
+    const logFrame = document.getElementById('inline-battle-log');
+    if (!frame || !logFrame) return;
+    try {
+      battleInstanceRef.current = new BattleClass({
+        id: `inline-${matchId}`,
+        $frame: $(frame),
+        $logFrame: $(logFrame),
+        log: (logData.log || '').split('\n'),
+        isReplay: true,
+        paused: false,
+        autoresize: true,
+      });
+    } catch (e) { console.error('Failed to init replay:', e); }
+  };
+
+  const handleToggleReplay = () => {
+    if (showReplay) {
+      destroyBattle();
+      setShowReplay(false);
+    } else {
+      setShowReplay(true);
+    }
+  };
+
+  useEffect(() => {
+    if (showReplay) {
+      // Wait for DOM to mount the replay containers
+      setTimeout(() => initReplay(), 200);
+      setTimeout(() => replayContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    }
+  }, [showReplay]);
+
+  // Stop Showdown JS on unmount
+  useEffect(() => {
+    return () => { destroyBattle(); };
+  }, []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -371,6 +435,47 @@ export default function PokemonBattle() {
           <div className="text-xs text-yellow-100/80 mt-1 text-center">
             {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? (winnerName ? 'Win by timeout' : 'Timeout') : 'Completed'} · Duration {duration}
           </div>
+        </div>
+      )}
+
+      {/* Replay Button */}
+      {match.status === 'completed' && !showReplay && (
+        <div className="flex justify-center mb-4">
+          <button
+            onClick={handleToggleReplay}
+            className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2 rounded-full text-sm transition-colors shadow-lg"
+          >
+            🎬 Watch Animated Replay
+          </button>
+        </div>
+      )}
+
+      {/* Inline Replay Container — full bleed, breaks out of page padding */}
+      {showReplay && (
+        <div ref={replayContainerRef} className="relative mb-4" style={{ margin: '0 -1.5rem 1rem', height: '420px', overflow: 'hidden' }}>
+          {/* Controls bar */}
+          <div className="absolute top-2 right-2 z-10 flex gap-2">
+            <button
+              onClick={() => {
+                const next = !isMuted;
+                setIsMuted(next);
+                const BS = (window as any).BattleSound;
+                if (BS) { BS.setVolume(next ? 0 : 50); BS.soundEnabled = !next; }
+              }}
+              className="bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 transition-colors"
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? '🔇 Unmute' : '🔊 Mute'}
+            </button>
+            <button
+              onClick={handleToggleReplay}
+              className="bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 transition-colors"
+            >
+              ▼ Hide
+            </button>
+          </div>
+          <div id="inline-battle-frame" className="battle" style={{ width: '100%', height: '100%' }} />
+          <div id="inline-battle-log" className="battle-log" />
         </div>
       )}
 

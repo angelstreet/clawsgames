@@ -494,54 +494,84 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
 
 // Task #902: GET /api/pokemon/:id/log - full battle log for replay (must be before /:matchId)
 router.get('/:matchId/log', (req, res) => {
-  console.log('DEBUG: /log route hit for', req.params.matchId);
   const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.matchId as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
 
-  // Get all moves with raw battle logs
-  const moves = db.prepare('SELECT move_number, move_data, raw_battle_log FROM moves WHERE match_id = ? ORDER BY move_number').all(req.params.matchId as string) as any[];
-  
-  // Build the full Showdown-format battle log
-  const fullLog: string[] = [];
-  
-  // Add initial battle setup from first move's raw log if available
-  if (moves.length > 0 && moves[0].raw_battle_log) {
-    const firstRaw = moves[0].raw_battle_log;
-    // Extract initial lines (player info, teams, start)
-    const lines = firstRaw.split('\n');
-    for (const line of lines) {
-      if (line.startsWith('|player|') || line.startsWith('|gametype|') || line.startsWith('|gen|') || 
-          line.startsWith('|tier|') || line.startsWith('|clearpoke|') || line.startsWith('|poke|') || 
-          line.startsWith('|start|') || line.startsWith('|request|')) {
-        fullLog.push(line);
+  // Use the last move's raw_battle_log — it's cumulative (contains all previous turns)
+  const lastMove = db.prepare(
+    "SELECT raw_battle_log FROM moves WHERE match_id = ? AND raw_battle_log IS NOT NULL AND raw_battle_log != '' ORDER BY id DESC LIMIT 1"
+  ).get(req.params.matchId as string) as any;
+
+  if (!lastMove) { res.json({ match_id: req.params.matchId, log: '' }); return; }
+
+  const rawLines = lastMove.raw_battle_log.split('\n');
+
+  // --- Extract header lines (before |start|) ---
+  const headerLines: string[] = [];
+  const setupPrefixes = ['|player|', '|gametype|', '|gen|', '|tier|', '|clearpoke', '|poke|'];
+  let foundStart = false;
+  for (const line of rawLines) {
+    if (line.startsWith('|start|') || line === '|start') { foundStart = true; break; }
+    if (setupPrefixes.some(p => line.startsWith(p))) headerLines.push(line);
+  }
+  if (!foundStart) { res.json({ match_id: req.params.matchId, log: '' }); return; }
+
+  // --- Synthesize |switch| events from first |request| block for each side ---
+  const switchLines: string[] = [];
+  const seenSides = new Set<string>();
+  for (const line of rawLines) {
+    if (!line.startsWith('|request|')) continue;
+    try {
+      const req2 = JSON.parse(line.slice('|request|'.length));
+      const side = req2?.side;
+      if (!side || seenSides.has(side.id)) continue;
+      seenSides.add(side.id);
+      const active = side.pokemon?.[0];
+      if (!active) continue;
+      const slot = side.id === 'p1' ? 'p1a' : 'p2a';
+      const nickname = active.details?.split(',')[0] || active.ident?.split(': ')[1] || 'Unknown';
+      switchLines.push(`|switch|${slot}: ${nickname}|${active.details}|${active.condition}`);
+    } catch { /* skip malformed */ }
+  }
+
+  // --- Collect turn blocks, deduplicating by turn number (keep first occurrence) ---
+  const turnBlocks = new Map<number, string[]>();
+  let currentTurn: number | null = null;
+  let currentBlock: string[] = [];
+
+  for (const line of rawLines) {
+    if (line.startsWith('|request|')) continue; // skip request lines
+    if (line.startsWith('|turn|')) {
+      const n = parseInt(line.slice('|turn|'.length), 10);
+      if (!turnBlocks.has(n)) {
+        currentTurn = n;
+        currentBlock = [line];
+        turnBlocks.set(n, currentBlock);
+      } else {
+        currentTurn = null; // duplicate turn — skip
+        currentBlock = [];
       }
+    } else if (currentTurn !== null) {
+      currentBlock.push(line);
     }
   }
-  
-  // Add raw battle logs from each move
-  for (const move of moves) {
-    if (move.raw_battle_log) {
-      const lines = move.raw_battle_log.split('\n');
-      for (const line of lines) {
-        // Skip request lines and duplicates of setup
-        if (!line.startsWith('|request|') && !line.startsWith('|player|') && 
-            !line.startsWith('|gametype|') && !line.startsWith('|gen|') && 
-            !line.startsWith('|tier|') && !line.startsWith('|clearpoke|') && 
-            !line.startsWith('|poke|') && !line.startsWith('|start|')) {
-          fullLog.push(line);
-        }
-      }
-    }
+
+  // --- Assemble final log ---
+  const fullLog: string[] = [
+    ...headerLines,
+    '|start',
+    ...switchLines,
+  ];
+  for (const turn of Array.from(turnBlocks.keys()).sort((a, b) => a - b)) {
+    fullLog.push(...(turnBlocks.get(turn) || []));
   }
-  
-  // Add winner if game is completed
+
+  // Add winner for completed matches
   if (match.status === 'completed' && match.winner_id) {
-    const winner = match.result?.includes('player1') ? match.p1_name : match.p2_name;
-    if (winner) {
-      fullLog.push(`|win|${winner}`);
-    }
+    const winnerRow = db.prepare('SELECT agent_name FROM agents WHERE id = ?').get(match.winner_id) as any;
+    if (winnerRow?.agent_name) fullLog.push(`|win|${winnerRow.agent_name}`);
   }
-  
+
   res.json({ match_id: req.params.matchId, log: fullLog.join('\n') });
 });
 
