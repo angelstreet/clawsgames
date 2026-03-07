@@ -170,7 +170,14 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
 
   // Pokemon: route through Showdown engine (turn-based buffering: P1 stores move, P2 triggers playTurn)
   if (match.game_id === 'pokemon') {
-    const playerMove = req.body.move;
+    // Normalize move: accept "1"-"4" as "move 1"-"move 4", bare "move"/"switch" fall back to "move 1"/"switch 2"
+    const raw = String(req.body.move || '').trim();
+    const playerMove = /^move [1-4]$/i.test(raw) ? raw.toLowerCase()
+      : /^switch [1-6]$/i.test(raw) ? raw.toLowerCase()
+      : /^[1-4]$/.test(raw) ? `move ${raw}`
+      : /^move$/i.test(raw) ? 'move 1'
+      : /^switch$/i.test(raw) ? 'switch 2'
+      : raw;
     const moveNumber = match.move_count + 1;
 
     if (playerNum === 1) {
@@ -234,6 +241,21 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       }
       destroyBattle(match.id);
       res.json({ valid: true, status: 'completed', result: matchResult, winner: result.winner, turn: result.turn });
+      return;
+    }
+
+    // Max turns cap: highest HP% wins
+    const game = db.prepare('SELECT max_turns FROM games WHERE id = ?').get('pokemon') as any;
+    const maxTurns = game?.max_turns || 50;
+    if (result.turn >= maxTurns) {
+      const cur = getBattleState(match.id);
+      const p1Hp = (cur?.p1Request?.side?.pokemon || []).reduce((s: number, p: any) => { const m = String(p.condition || '').match(/(\d+)\/(\d+)/); return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0); }, 0);
+      const p2Hp = (cur?.p2Request?.side?.pokemon || []).reduce((s: number, p: any) => { const m = String(p.condition || '').match(/(\d+)\/(\d+)/); return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0); }, 0);
+      const winnerId = p1Hp > p2Hp ? match.player1_id : p2Hp > p1Hp ? match.player2_id : null;
+      const matchResult = winnerId === match.player1_id ? 'player1_win' : winnerId === match.player2_id ? 'player2_win' : 'draw';
+      db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`).run(winnerId, matchResult, result.turn, match.id);
+      destroyBattle(match.id);
+      res.json({ valid: true, status: 'completed', result: matchResult, winner: winnerId === match.player1_id ? 'Player 1' : 'Player 2', turn: result.turn, reason: 'max_turn_limit_hp' });
       return;
     }
 

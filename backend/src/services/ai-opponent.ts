@@ -105,6 +105,10 @@ Respond with ONLY the command, nothing else.`;
         if (gameId === 'tictactoe') {
           const match = content.match(/\d/);
           move = match ? match[0] : content;
+        } else if (gameId === 'pokemon') {
+          // Extract full "move N" or "switch N" command from response
+          const pm = content.match(/\b(move\s+[1-4]|switch\s+[1-6])\b/i);
+          move = pm ? pm[1].toLowerCase() : content.split(/\s/)[0].replace(/[.!?,]$/g, '');
         } else {
           move = content.split(/\s/)[0].replace(/[.!?,]$/g, '');
         }
