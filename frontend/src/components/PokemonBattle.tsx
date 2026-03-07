@@ -414,15 +414,27 @@ export default function PokemonBattle() {
           ← Back
         </button>
         <div className="text-center">
-          <div className="text-lg font-bold text-yellow-400">
-            {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}
+          <div className="text-lg font-bold">
+            {match.status === 'completed' && winnerName ? (
+              <>
+                <span className={winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}>
+                  {winnerName === match.p1_name ? '🏆 ' : '💀 '}{match.p1_name}
+                </span>
+                <span className="text-gray-600 mx-1">vs</span>
+                <span className={winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}>
+                  {winnerName === match.p2_name ? '🏆 ' : '💀 '}{match.p2_name}
+                </span>
+              </>
+            ) : (
+              <span className="text-yellow-400">
+                {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-500">
             {match.status === 'active'
               ? `Turn ${match.battle?.turn ?? match.move_count ?? '?'} · LIVE`
-              : winnerName
-                ? `${winnerName} wins · ${match.result === 'timeout' ? 'timeout' : match.result === 'draw' ? 'draw' : 'completed'} · ${duration}${match.move_count ? ` · turn ${match.move_count}` : ''}`
-                : `Completed · ${duration}${match.move_count ? ` · turn ${match.move_count}` : ''}`}
+              : `${match.result === 'timeout' ? 'timeout' : match.result === 'draw' ? 'draw' : 'completed'} · ${duration}${match.move_count ? ` · turn ${match.move_count}` : ''}`}
           </div>
         </div>
         <div className="text-sm text-gray-600 text-right">#{matchId?.slice(0, 8)}</div>
