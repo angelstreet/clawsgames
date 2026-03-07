@@ -420,23 +420,13 @@ export default function PokemonBattle() {
           <div className="text-xs text-gray-500">
             {match.status === 'active'
               ? `Turn ${match.battle?.turn ?? match.move_count ?? '?'} · LIVE`
-              : `Completed · Duration ${duration}${match.move_count ? ` (turn ${match.move_count})` : ''}`}
+              : winnerName
+                ? `${winnerName} wins · ${match.result === 'timeout' ? 'timeout' : match.result === 'draw' ? 'draw' : 'completed'} · ${duration}${match.move_count ? ` · turn ${match.move_count}` : ''}`
+                : `Completed · ${duration}${match.move_count ? ` · turn ${match.move_count}` : ''}`}
           </div>
         </div>
         <div className="text-sm text-gray-600 text-right">#{matchId?.slice(0, 8)}</div>
       </div>
-
-      {/* Winner Banner - shows when match is over (including timeout) */}
-      {displayedBattle && battleOver && (match.status === 'completed') && (
-        <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3 mb-4">
-          <div className="text-yellow-300 font-bold text-lg text-center">
-            {winnerName ? `Winner: ${winnerName}` : 'Battle Ended'}
-          </div>
-          <div className="text-xs text-yellow-100/80 mt-1 text-center">
-            {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? (winnerName ? 'Win by timeout' : 'Timeout') : 'Completed'} · Duration {duration}
-          </div>
-        </div>
-      )}
 
       {/* Replay Button */}
       {match.status === 'completed' && !showReplay && (
@@ -528,18 +518,18 @@ export default function PokemonBattle() {
                     const pct = hpPercent(p.condition || p.hp);
                     return (
                       <div key={i} className="flex flex-col items-center gap-0.5">
-                        <div className="relative w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                        <div className="relative w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
                           <img
                             src={getSpriteUrl(p.details)}
                             alt={name}
-                            className={`w-9 h-9 object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''}`}
+                            className={`w-5 h-5 object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''}`}
                             style={{ imageRendering: 'pixelated' }}
                             onError={(e) => { (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`; }}
                           />
-                          {fainted && <span className="absolute bottom-0 right-0 text-[8px] bg-red-700 text-white rounded px-0.5">FNT</span>}
+                          {fainted && <span className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-red-700 text-white rounded px-0.5 leading-tight">FNT</span>}
                         </div>
-                        <div className="text-[10px] text-gray-400 truncate max-w-[40px] text-center">{name}</div>
-                        {!fainted && <div className="text-[9px] text-green-400">{pct}%</div>}
+                        <div className="text-[8px] text-gray-500 truncate max-w-[20px] text-center">{name}</div>
+                        {!fainted && <div className="text-[7px] text-green-500">{pct}%</div>}
                       </div>
                     );
                   })}
