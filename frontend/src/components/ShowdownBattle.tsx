@@ -22,7 +22,6 @@ export default function ShowdownBattle() {
   const [error, setError] = useState<string | null>(null);
   const [battleLog, setBattleLog] = useState<string>('');
   const initialized = useRef(false);
-  const battleRef = useRef<any>(null);
 
   useEffect(() => {
     if (!matchId || initialized.current) return;
@@ -114,14 +113,12 @@ export default function ShowdownBattle() {
     const battleContainer = document.getElementById('showdown-battle');
     const logContainer = document.getElementById('showdown-log');
     
-    // @ts-ignore - jQuery global
-    const $ = (window as any).$;
-    if (battleContainer && logContainer && BattleClass && $) {
+    if (battleContainer && logContainer && BattleClass) {
       try {
-        battleRef.current = new BattleClass({
+        new BattleClass({
           id: matchId || 'battle',
-          $frame: $(battleContainer),
-          $logFrame: $(logContainer),
+          $frame: battleContainer,
+          $logFrame: logContainer,
           log: battleLogText.split('\n'),
           isReplay: true,
           paused: true,
@@ -132,16 +129,6 @@ export default function ShowdownBattle() {
       }
     }
   };
-
-  // Destroy battle instance on unmount to stop all JS timers/animations
-  useEffect(() => {
-    return () => {
-      if (battleRef.current) {
-        try { battleRef.current.destroy?.(); } catch {}
-        battleRef.current = null;
-      }
-    };
-  }, []);
 
   if (loading) {
     return (
