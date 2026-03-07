@@ -313,7 +313,7 @@ export default function PokemonBattle() {
   useEffect(() => {
     if (!showReplay) return;
     const isLive = match?.status === 'active';
-    setTimeout(() => fetchAndInitBattle(/* paused */ !isLive), 200);
+    setTimeout(() => fetchAndInitBattle(false), 200);
     setTimeout(() => replayContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
     if (isLive) {
       liveIntervalRef.current = setInterval(async () => {
