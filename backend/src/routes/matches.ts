@@ -4,7 +4,7 @@ import db from '../db/index.js';
 import { authMiddleware, AuthedRequest } from '../middleware/auth.js';
 import { getEngine } from '../engines/index.js';
 import { calculateElo } from '../services/elo.js';
-import { createBattle, playTurn, getBattleState, getRawBattleLog, destroyBattle } from '../engines/pokemon.js';
+import { createBattle, playTurn, getBattleState, getRawBattleLog, destroyBattle, formatView } from '../engines/pokemon.js';
 import type { Response } from 'express';
 
 const router = Router();
@@ -194,7 +194,9 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
         .run(match.id, agentId, moveNumber, playerMove, '{}');
       db.prepare('UPDATE matches SET move_count = ?, current_turn = 2 WHERE id = ?').run(moveNumber, match.id);
-      res.json({ valid: true, status: 'active', current_turn: 2, message: 'Move recorded, waiting for opponent' });
+      const b = getBattleState(match.id);
+      res.json({ valid: true, status: 'active', current_turn: 2, message: 'Move recorded, waiting for opponent',
+        battle_view: b ? formatView(b.p1Request) : undefined });
       return;
     }
 
@@ -277,8 +279,13 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       return;
     }
 
-    db.prepare('UPDATE matches SET move_count=?, current_turn=1 WHERE id=?').run(result.turn, match.id);
-    res.json({ valid: true, status: 'active', current_turn: 1, battle_log: result.battleLog, turn: result.turn });
+    // Save current battle state to board_state so agents can see pokemon HP
+    const cur = getBattleState(match.id);
+    const boardState = cur ? JSON.stringify({ turn: result.turn, p1_pokemon: cur.p1Request?.side?.pokemon, p2_pokemon: cur.p2Request?.side?.pokemon }) : '{}';
+    db.prepare('UPDATE matches SET move_count=?, current_turn=1, board_state=? WHERE id=?').run(result.turn, boardState, match.id);
+    res.json({ valid: true, status: 'active', current_turn: 1, battle_log: result.battleLog, turn: result.turn,
+      p1_view: result.p1View, p2_view: result.p2View,
+      turns_remaining: Math.max(0, (game?.max_turns || 50) - result.turn) });
     return;
   }
 
