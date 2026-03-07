@@ -261,39 +261,48 @@ export default function PokemonBattle() {
     }
   };
 
-  const initReplay = async (retries = 10) => {
+  const initBattleWithLog = (logText: string, paused: boolean, retries = 10) => {
     const BattleClass = (window as any).Battle;
     const $ = (window as any).$;
     if (!BattleClass || !$) {
-      if (retries > 0) {
-        setTimeout(() => initReplay(retries - 1), 500);
-      } else {
-        console.error('Showdown scripts failed to load');
-      }
+      if (retries > 0) setTimeout(() => initBattleWithLog(logText, paused, retries - 1), 500);
       return;
     }
-    const logData = await fetch(apiUrl(`/api/pokemon/${matchId}/log`))
-      .then(r => r.json())
-      .catch(() => ({ log: '' }));
-    destroyBattle();
     const frame = document.getElementById('inline-battle-frame');
     const logFrame = document.getElementById('inline-battle-log');
     if (!frame || !logFrame) return;
+    destroyBattle();
     try {
       battleInstanceRef.current = new BattleClass({
         id: `inline-${matchId}`,
         $frame: $(frame),
         $logFrame: $(logFrame),
-        log: (logData.log || '').split('\n'),
+        log: logText.split('\n'),
         isReplay: true,
-        paused: false,
+        paused,
         autoresize: true,
       });
-    } catch (e) { console.error('Failed to init replay:', e); }
+    } catch (e) { console.error('Failed to init battle:', e); }
+  };
+
+  const fetchAndInitBattle = async (paused: boolean) => {
+    const logData = await fetch(apiUrl(`/api/pokemon/${matchId}/log`))
+      .then(r => r.json())
+      .catch(() => ({ log: '' }));
+    const logText = logData.log || '';
+    if (!logText) { setLiveLogEmpty(true); return; }
+    setLiveLogEmpty(false);
+    lastLogRef.current = logText;
+    initBattleWithLog(logText, paused);
+  };
+
+  const stopLivePolling = () => {
+    if (liveIntervalRef.current) { clearInterval(liveIntervalRef.current); liveIntervalRef.current = null; }
   };
 
   const handleToggleReplay = () => {
     if (showReplay) {
+      stopLivePolling();
       destroyBattle();
       setShowReplay(false);
     } else {
@@ -302,16 +311,31 @@ export default function PokemonBattle() {
   };
 
   useEffect(() => {
-    if (showReplay) {
-      // Wait for DOM to mount the replay containers
-      setTimeout(() => initReplay(), 200);
-      setTimeout(() => replayContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    if (!showReplay) return;
+    const isLive = match?.status === 'active';
+    setTimeout(() => fetchAndInitBattle(/* paused */ !isLive), 200);
+    setTimeout(() => replayContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    // For live matches, poll every 4s and reinit when log grows
+    if (isLive) {
+      liveIntervalRef.current = setInterval(async () => {
+        const logData = await fetch(apiUrl(`/api/pokemon/${matchId}/log`))
+          .then(r => r.json()).catch(() => ({ log: '' }));
+        const logText = logData.log || '';
+        if (logText && logText !== lastLogRef.current) {
+          lastLogRef.current = logText;
+          setLiveLogEmpty(false);
+          initBattleWithLog(logText, false);
+        } else if (!logText) {
+          setLiveLogEmpty(true);
+        }
+      }, 4000);
     }
+    return () => stopLivePolling();
   }, [showReplay]);
 
   // Stop Showdown JS on unmount
   useEffect(() => {
-    return () => { destroyBattle(); };
+    return () => { stopLivePolling(); destroyBattle(); };
   }, []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -443,21 +467,32 @@ export default function PokemonBattle() {
         <div className="text-sm text-gray-600 text-right">#{matchId?.slice(0, 8)}</div>
       </div>
 
-      {/* Replay Button */}
-      {match.status === 'completed' && !showReplay && (
+      {/* Replay / Live button */}
+      {!showReplay && (match.status === 'completed' || match.status === 'active') && (
         <div className="flex justify-center mb-4">
           <button
             onClick={handleToggleReplay}
-            className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2 rounded-full text-sm transition-colors shadow-lg"
+            className={`font-semibold px-5 py-2 rounded-full text-sm transition-colors shadow-lg text-white ${match.status === 'active' ? 'bg-red-600 hover:bg-red-500' : 'bg-purple-600 hover:bg-purple-500'}`}
           >
-            🎬 Watch Animated Replay
+            {match.status === 'active' ? '🔴 Watch Live' : '🎬 Watch Animated Replay'}
           </button>
         </div>
       )}
 
-      {/* Inline Replay Container — matches Battle Log section width */}
+      {/* Inline Replay / Live Container */}
       {showReplay && (
         <div ref={replayContainerRef} className="relative bg-gray-900 rounded-xl border border-gray-800 mb-4" style={{ height: '420px', overflow: 'hidden' }}>
+          {match?.status === 'active' && (
+            <div className="absolute top-2 left-3 z-10 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+              <span className="text-xs text-red-400 font-semibold">LIVE</span>
+            </div>
+          )}
+          {liveLogEmpty && (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm z-10 pointer-events-none">
+              Live battle view not available for this match
+            </div>
+          )}
           <div className="absolute top-2 right-2 z-10 flex gap-2">
             <button
               onClick={() => {
