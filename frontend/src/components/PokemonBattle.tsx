@@ -182,7 +182,10 @@ function PokemonCard({ pokemon, back = false, isActive = false }: { pokemon: Pok
           className={`max-w-full max-h-full object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''} ${back ? '' : 'scale-x-[-1]'}`}
           style={{ imageRendering: 'pixelated', filter: 'brightness(1) contrast(1) invert(0) !important' }}
           onError={(e) => {
-            (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`;
+            const img = e.target as HTMLImageElement;
+            const base = name.split('-')[0].toLowerCase();
+            img.onerror = null;
+            img.src = `https://play.pokemonshowdown.com/sprites/home/${base}.png`;
           }}
         />
         {fainted && (
@@ -441,21 +444,9 @@ export default function PokemonBattle() {
         </button>
         <div className="text-center">
           <div className="text-lg font-bold">
-            {match.status === 'completed' && winnerName ? (
-              <>
-                <span className={winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}>
-                  {winnerName === match.p1_name ? '🏆 ' : '💀 '}{match.p1_name}
-                </span>
-                <span className="text-gray-600 mx-1">vs</span>
-                <span className={winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}>
-                  {winnerName === match.p2_name ? '🏆 ' : '💀 '}{match.p2_name}
-                </span>
-              </>
-            ) : (
-              <span className="text-yellow-400">
-                {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}
-              </span>
-            )}
+            <span className="text-yellow-400">
+              {match.p1_name} <span className="text-gray-500">vs</span> {match.p2_name}
+            </span>
           </div>
           <div className="text-xs text-gray-500">
             {match.status === 'active'
@@ -498,7 +489,7 @@ export default function PokemonBattle() {
                 const next = !isMuted;
                 setIsMuted(next);
                 const BS = (window as any).BattleSound;
-                if (BS) { BS.setVolume(next ? 0 : 50); BS.soundEnabled = !next; }
+                if (BS?.setMute) { BS.setMute(next); }
               }}
               className="bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 transition-colors"
             >
@@ -539,7 +530,7 @@ export default function PokemonBattle() {
                             alt={name}
                             className={`w-14 h-14 object-contain pixelated scale-x-[-1] ${fainted ? 'grayscale opacity-40' : ''}`}
                             style={{ imageRendering: 'pixelated' }}
-                            onError={(e) => { (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`; }}
+                            onError={(e) => { const img = e.target as HTMLImageElement; img.onerror = null; img.src = `https://play.pokemonshowdown.com/sprites/home/${name.split('-')[0].toLowerCase()}.png`; }}
                           />
                           {fainted && <span className="absolute bottom-0 right-0 text-[8px] bg-red-700 text-white rounded px-0.5 leading-tight">FNT</span>}
                         </div>
@@ -573,7 +564,7 @@ export default function PokemonBattle() {
                             alt={name}
                             className={`w-14 h-14 object-contain pixelated ${fainted ? 'grayscale opacity-40' : ''}`}
                             style={{ imageRendering: 'pixelated' }}
-                            onError={(e) => { (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`; }}
+                            onError={(e) => { const img = e.target as HTMLImageElement; img.onerror = null; img.src = `https://play.pokemonshowdown.com/sprites/home/${name.split('-')[0].toLowerCase()}.png`; }}
                           />
                           {fainted && <span className="absolute bottom-0 right-0 text-[8px] bg-red-700 text-white rounded px-0.5 leading-tight">FNT</span>}
                         </div>
