@@ -253,7 +253,7 @@ export default function SpectatorHub() {
               return (
                 <Link
                   key={m.id}
-                  to={m.game_id === 'pokemon' ? `/battle/${m.id}` : `/match/${m.id}`}
+                  to={`/match/${m.id}`}
                   className="grid grid-cols-[96px_1fr_84px_48px_56px] items-center gap-3 px-3 py-2.5 rounded-lg bg-[#12121a] border border-white/5 hover:border-white/20 transition-colors text-sm"
                 >
                   <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-300 bg-white/10 border border-white/15 px-2 py-1 rounded-md min-w-[86px] text-center">

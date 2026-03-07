@@ -12,6 +12,19 @@ const router = Router();
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_TURN_TIMEOUT_SEC = 120;
 
+// Helper to save final battle state before destroying
+function saveFinalBattleState(matchId: string) {
+  const battle = getBattleState(matchId);
+  if (!battle) return;
+  const finalState = JSON.stringify({
+    turn: battle.turn,
+    winner: battle.winner,
+    p1_pokemon: battle.p1Request?.side?.pokemon,
+    p2_pokemon: battle.p2Request?.side?.pokemon
+  });
+  db.prepare(`UPDATE matches SET board_state = ? WHERE id = ?`).run(finalState, matchId);
+}
+
 function getPokemonLimits() {
   const row = db.prepare('SELECT max_turns, turn_timeout_sec FROM games WHERE id = ?').get('pokemon') as any;
   return {
@@ -73,6 +86,7 @@ async function enforceInactivityTimeout(match: any): Promise<boolean> {
   db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = 'timeout', finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(winnerId, match.id);
   await settleEloAndReport(match, winnerId, 'timeout', match.id);
+  saveFinalBattleState(match.id);
   destroyBattle(match.id);
   return true;
 }
@@ -296,6 +310,7 @@ router.post('/:matchId/auto', async (req: AuthedRequest, res: Response) => {
     db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(winnerId, matchResult, result.turn, matchId);
     await settleEloAndReport(match, winnerId, matchResult, matchId);
+    saveFinalBattleState(matchId);
     destroyBattle(matchId);
     res.json({
       p1_move: p1Command,
@@ -320,6 +335,7 @@ router.post('/:matchId/auto', async (req: AuthedRequest, res: Response) => {
     db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(winnerId, matchResult, result.turn, matchId);
     await settleEloAndReport(match, winnerId, matchResult, matchId);
+    saveFinalBattleState(matchId);
     destroyBattle(matchId);
     res.json({
       p1_move: p1Command,
@@ -420,6 +436,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       .run(winnerId, matchResult, result.turn, req.params.matchId as string as string);
 
     await settleEloAndReport(match, winnerId, matchResult, req.params.matchId as string as string);
+    saveFinalBattleState(req.params.matchId as string);
     destroyBattle(req.params.matchId as string as string);
     res.json({
       your_move: playerMove,
@@ -446,6 +463,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, move_count = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(winnerId, matchResult, result.turn, req.params.matchId as string as string);
     await settleEloAndReport(match, winnerId, matchResult, req.params.matchId as string as string);
+    saveFinalBattleState(req.params.matchId as string);
     destroyBattle(req.params.matchId as string as string);
     res.json({
       your_move: playerMove,
@@ -602,11 +620,18 @@ router.get('/:matchId', async (req, res) => {
   const match = db.prepare(`SELECT m.*, a1.agent_name as p1_name, a2.agent_name as p2_name FROM matches m LEFT JOIN agents a1 ON m.player1_id = a1.id LEFT JOIN agents a2 ON m.player2_id = a2.id WHERE m.id = ?`).get(req.params.matchId as string as string) as any;
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
   const battle = getBattleState(req.params.matchId as string as string);
+  // For completed games, load saved battle state from database
+  let savedBattle = null;
+  if (match.status === 'completed' && match.board_state) {
+    try {
+      savedBattle = JSON.parse(match.board_state);
+    } catch (e) { /* ignore parse errors */ }
+  }
   const moves = db.prepare('SELECT * FROM moves WHERE match_id = ? ORDER BY move_number').all(req.params.matchId as string as string);
   const limits = getPokemonLimits();
   res.json({
     ...match,
-    battle: battle ? { turn: battle.turn, winner: battle.winner, p1_pokemon: battle.p1Request?.side?.pokemon, p2_pokemon: battle.p2Request?.side?.pokemon } : null,
+    battle: battle ? { turn: battle.turn, winner: battle.winner, p1_pokemon: battle.p1Request?.side?.pokemon, p2_pokemon: battle.p2Request?.side?.pokemon } : savedBattle,
     moves,
     limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - (match.move_count || 0)) },
   });
