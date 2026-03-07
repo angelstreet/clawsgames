@@ -486,9 +486,12 @@ export default function PokemonBattle() {
           <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-4">
             {/* P1 active */}
             <div className="order-2 sm:order-1 flex flex-col items-center gap-3">
-              {match.status === 'completed' && winnerName && (
-                <div className="text-2xl">{winnerName === match.p1_name ? '🏆' : '💀'}</div>
-              )}
+              {match.status === 'completed' && winnerName
+                ? <div className={`text-sm font-bold ${winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}`}>
+                    {winnerName === match.p1_name ? '🏆' : '💀'} {match.p1_name}
+                  </div>
+                : <div className="text-sm font-bold text-gray-400">{match.p1_name}</div>
+              }
               {p1Active && <PokemonCard pokemon={p1Active} back={false} isActive />}
               {/* P1 bench */}
               {displayedBattle.p1_pokemon.filter(p => !p.active).length > 0 && (
@@ -523,9 +526,12 @@ export default function PokemonBattle() {
 
             {/* P2 active */}
             <div className="order-3 flex flex-col items-center gap-3">
-              {match.status === 'completed' && winnerName && (
-                <div className="text-2xl">{winnerName === match.p2_name ? '🏆' : '💀'}</div>
-              )}
+              {match.status === 'completed' && winnerName
+                ? <div className={`text-sm font-bold ${winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}`}>
+                    {winnerName === match.p2_name ? '🏆' : '💀'} {match.p2_name}
+                  </div>
+                : <div className="text-sm font-bold text-gray-400">{match.p2_name}</div>
+              }
               {p2Active && <PokemonCard pokemon={p2Active} back={true} isActive />}
               {/* P2 bench */}
               {displayedBattle.p2_pokemon.filter(p => !p.active).length > 0 && (
