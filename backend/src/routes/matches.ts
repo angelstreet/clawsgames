@@ -240,7 +240,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       const winnerId = result.winner === 'Player 1' ? match.player1_id : match.player2_id;
       const matchResult = result.winner === 'tie' ? 'draw' : (result.winner === 'Player 1' ? 'player1_win' : 'player2_win');
       db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(winnerId, matchResult, result.turn, match.id);
+        .run(winnerId, matchResult, moveNumber, match.id);
 
       const r1 = db.prepare('SELECT elo FROM ratings WHERE agent_id=? AND game_id=?').get(match.player1_id, 'pokemon') as any;
       const r2 = db.prepare('SELECT elo FROM ratings WHERE agent_id=? AND game_id=?').get(match.player2_id, 'pokemon') as any;
@@ -264,16 +264,17 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       return;
     }
 
-    // Max turns cap: highest HP% wins
+    // Max turns cap: use real DB move count (survives server restarts, not PS battle turn)
     const game = db.prepare('SELECT max_turns FROM games WHERE id = ?').get('pokemon') as any;
     const maxTurns = game?.max_turns || 50;
-    if (result.turn >= maxTurns) {
+    const roundsPlayed = Math.floor(moveNumber / 2); // each round = P1 move + P2 move
+    if (roundsPlayed >= maxTurns) {
       const cur = getBattleState(match.id);
       const p1Hp = (cur?.p1Request?.side?.pokemon || []).reduce((s: number, p: any) => { const m = String(p.condition || '').match(/(\d+)\/(\d+)/); return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0); }, 0);
       const p2Hp = (cur?.p2Request?.side?.pokemon || []).reduce((s: number, p: any) => { const m = String(p.condition || '').match(/(\d+)\/(\d+)/); return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0); }, 0);
       const winnerId = p1Hp > p2Hp ? match.player1_id : p2Hp > p1Hp ? match.player2_id : null;
       const matchResult = winnerId === match.player1_id ? 'player1_win' : winnerId === match.player2_id ? 'player2_win' : 'draw';
-      db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`).run(winnerId, matchResult, result.turn, match.id);
+      db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`).run(winnerId, matchResult, moveNumber, match.id);
       destroyBattle(match.id);
       res.json({ valid: true, status: 'completed', result: matchResult, winner: winnerId === match.player1_id ? 'Player 1' : 'Player 2', turn: result.turn, reason: 'max_turn_limit_hp' });
       return;
@@ -282,10 +283,10 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     // Save current battle state to board_state so agents can see pokemon HP
     const cur = getBattleState(match.id);
     const boardState = cur ? JSON.stringify({ turn: result.turn, p1_pokemon: cur.p1Request?.side?.pokemon, p2_pokemon: cur.p2Request?.side?.pokemon }) : '{}';
-    db.prepare('UPDATE matches SET move_count=?, current_turn=1, board_state=? WHERE id=?').run(result.turn, boardState, match.id);
+    db.prepare('UPDATE matches SET move_count=?, current_turn=1, board_state=? WHERE id=?').run(moveNumber, boardState, match.id);
     res.json({ valid: true, status: 'active', current_turn: 1, battle_log: result.battleLog, turn: result.turn,
       p1_view: result.p1View, p2_view: result.p2View,
-      turns_remaining: Math.max(0, (game?.max_turns || 50) - result.turn) });
+      turns_remaining: Math.max(0, maxTurns - roundsPlayed) });
     return;
   }
 
