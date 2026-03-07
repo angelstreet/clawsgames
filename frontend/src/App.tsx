@@ -10,14 +10,14 @@ export default function App() {
   return (
     <BrowserRouter basename={basePath}>
       <div className="min-h-screen bg-[#0a0a0f] text-white">
-        <header className="border-b border-white/10 px-4 py-1 flex items-center justify-between">
+        <header className="border-b border-white/10 px-4 py-2 flex items-start justify-between">
           <div></div>
-          <img src="/logo.jpg" alt="ClawsGames" className="h-40 w-auto" />
+          <img src="/logo.jpg" alt="ClawsGames" className="h-32 w-auto" />
           <a
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1"
+            className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1 mt-1"
           >
             Rankings <span className="text-xs">→</span>
           </a>
