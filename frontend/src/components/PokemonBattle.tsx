@@ -236,7 +236,10 @@ export default function PokemonBattle() {
   const [match, setMatch] = useState<MatchData | null>(null);
   const [lastBattle, setLastBattle] = useState<BattleState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showReplay, setShowReplay] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const battleInstanceRef = useRef<any>(null);
+  const replayContainerRef = useRef<HTMLDivElement>(null);
 
   const handleBack = () => {
     const idx = window.history.state?.idx ?? 0;
@@ -248,6 +251,67 @@ export default function PokemonBattle() {
   };
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Destroy Showdown battle instance (stops animations/timers)
+  const destroyBattle = () => {
+    if (battleInstanceRef.current) {
+      try { battleInstanceRef.current.destroy?.(); } catch {}
+      battleInstanceRef.current = null;
+    }
+  };
+
+  // Initialize inline Showdown replay after the container is in the DOM
+  const initReplay = async () => {
+    if (!matchId) return;
+    const BattleClass = (window as any).Battle;
+    const $ = (window as any).$;
+    if (!BattleClass || !$) return;
+
+    const logData = await fetch(apiUrl(`/api/pokemon/${matchId}/log`))
+      .then(r => r.json()).catch(() => ({ log: '' }));
+
+    const battleContainer = document.getElementById('inline-battle-frame');
+    const logContainer = document.getElementById('inline-battle-log');
+    if (!battleContainer || !logContainer) return;
+
+    destroyBattle();
+    try {
+      battleInstanceRef.current = new BattleClass({
+        id: `inline-${matchId}`,
+        $frame: $(battleContainer),
+        $logFrame: $(logContainer),
+        log: (logData.log || '').split('\n'),
+        isReplay: true,
+        paused: false,
+        autoresize: true,
+      });
+    } catch (e) {
+      console.error('Failed to init inline replay:', e);
+    }
+  };
+
+  const handleToggleReplay = () => {
+    if (showReplay) {
+      destroyBattle();
+      setShowReplay(false);
+    } else {
+      setShowReplay(true);
+    }
+  };
+
+  // Init replay once container is mounted, then scroll to it
+  useEffect(() => {
+    if (showReplay) {
+      const t = setTimeout(() => {
+        initReplay();
+        replayContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [showReplay, matchId]);
+
+  // Cleanup on unmount
+  useEffect(() => () => destroyBattle(), []);
 
   useEffect(() => {
     if (!matchId) return;
@@ -370,6 +434,43 @@ export default function PokemonBattle() {
           </div>
           <div className="text-xs text-yellow-100/80 mt-1 text-center">
             {match.result === 'draw' ? 'Draw' : match.result === 'timeout' ? (winnerName ? 'Win by timeout' : 'Timeout') : 'Completed'} · Duration {duration}
+          </div>
+        </div>
+      )}
+
+      {/* Replay toggle button — only for completed matches */}
+      {match.status === 'completed' && !showReplay && (
+        <div className="flex justify-center mb-4">
+          <button
+            type="button"
+            onClick={handleToggleReplay}
+            className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 border bg-purple-600/20 border-purple-500/40 text-purple-300 hover:bg-purple-600/30"
+          >
+            🎬 Watch Animated Replay
+          </button>
+        </div>
+      )}
+
+      {/* Inline Showdown replay — auto-height wrap */}
+      {showReplay && (
+        <div className="mb-4">
+          {/* Close button below the replay */}
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              onClick={handleToggleReplay}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-600/80 border border-red-400/40 text-white hover:bg-red-600 transition-all duration-150"
+            >
+              ✕ Close Replay
+            </button>
+          </div>
+          <div
+            ref={replayContainerRef}
+            className="rounded-xl border border-purple-800/40 overflow-hidden"
+            style={{ minHeight: '400px', height: 'auto' }}
+          >
+            <div id="inline-battle-frame" className="battle" />
+            <div id="inline-battle-log" className="battle-log" />
           </div>
         </div>
       )}
