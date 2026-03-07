@@ -16,7 +16,7 @@ export default function App() {
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1 mb-2"
+            className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1 self-start mt-2"
           >
             RankingOfClaws <span className="text-xs">→</span>
           </a>
