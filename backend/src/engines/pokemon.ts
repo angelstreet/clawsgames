@@ -187,9 +187,9 @@ export async function playTurn(matchId: string, p1Move: string, p2Move: string):
   const battle = battles.get(matchId);
   if (!battle) return { valid: false, p1View: '', p2View: '', battleLog: '', rawBattleLog: '', winner: null, turn: 0, error: 'Battle expired' };
 
-  // Write both moves simultaneously
-  battle.streams.p1.write(p1Move);
-  battle.streams.p2.write(p2Move);
+  // Only write to streams that need input — skip players in "wait" state (force-switch in progress for the other side)
+  if (!battle.p1Request?.wait) battle.streams.p1.write(p1Move);
+  if (!battle.p2Request?.wait) battle.streams.p2.write(p2Move);
 
   // Wait for turn to resolve
   await new Promise(r => setTimeout(r, 200));
