@@ -494,18 +494,18 @@ export default function PokemonBattle() {
                     const pct = hpPercent(p.condition || p.hp);
                     return (
                       <div key={i} className="flex flex-col items-center gap-0.5">
-                        <div className="relative w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                        <div className="relative w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
                           <img
                             src={getSpriteUrl(p.details)}
                             alt={name}
-                            className={`w-9 h-9 object-contain pixelated scale-x-[-1] ${fainted ? 'grayscale opacity-40' : ''}`}
+                            className={`w-5 h-5 object-contain pixelated scale-x-[-1] ${fainted ? 'grayscale opacity-40' : ''}`}
                             style={{ imageRendering: 'pixelated' }}
                             onError={(e) => { (e.target as HTMLImageElement).src = `https://play.pokemonshowdown.com/sprites/gen5/${toSpriteName(name)}.png`; }}
                           />
-                          {fainted && <span className="absolute bottom-0 right-0 text-[8px] bg-red-700 text-white rounded px-0.5">FNT</span>}
+                          {fainted && <span className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-red-700 text-white rounded px-0.5 leading-tight">FNT</span>}
                         </div>
-                        <div className="text-[10px] text-gray-400 truncate max-w-[40px] text-center">{name}</div>
-                        {!fainted && <div className="text-[9px] text-green-400">{pct}%</div>}
+                        <div className="text-[8px] text-gray-500 truncate max-w-[20px] text-center">{name}</div>
+                        {!fainted && <div className="text-[7px] text-green-500">{pct}%</div>}
                       </div>
                     );
                   })}
