@@ -486,12 +486,6 @@ export default function PokemonBattle() {
           <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-4">
             {/* P1 active */}
             <div className="order-2 sm:order-1 flex flex-col items-center gap-3">
-              {match.status === 'completed' && winnerName
-                ? <div className={`text-sm font-bold ${winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}`}>
-                    {winnerName === match.p1_name ? '🏆' : '💀'} {match.p1_name}
-                  </div>
-                : <div className="text-sm font-bold text-gray-400">{match.p1_name}</div>
-              }
               {p1Active && <PokemonCard pokemon={p1Active} back={false} isActive />}
               {/* P1 bench */}
               {displayedBattle.p1_pokemon.filter(p => !p.active).length > 0 && (
@@ -522,16 +516,24 @@ export default function PokemonBattle() {
             </div>
 
             {/* VS divider */}
-            <div className="order-1 sm:order-2 text-2xl font-black text-yellow-500/60 shrink-0">VS</div>
+            <div className="order-1 sm:order-2 flex flex-col items-center gap-1 shrink-0">
+              {match.status === 'completed' && winnerName ? (
+                <>
+                  <div className={`text-xs font-bold ${winnerName === match.p1_name ? 'text-yellow-400' : 'text-gray-500'}`}>
+                    {winnerName === match.p1_name ? '🏆' : '💀'} {match.p1_name}
+                  </div>
+                  <div className="text-2xl font-black text-yellow-500/60">VS</div>
+                  <div className={`text-xs font-bold ${winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}`}>
+                    {winnerName === match.p2_name ? '🏆' : '💀'} {match.p2_name}
+                  </div>
+                </>
+              ) : (
+                <div className="text-2xl font-black text-yellow-500/60">VS</div>
+              )}
+            </div>
 
             {/* P2 active */}
             <div className="order-3 flex flex-col items-center gap-3">
-              {match.status === 'completed' && winnerName
-                ? <div className={`text-sm font-bold ${winnerName === match.p2_name ? 'text-yellow-400' : 'text-gray-500'}`}>
-                    {winnerName === match.p2_name ? '🏆' : '💀'} {match.p2_name}
-                  </div>
-                : <div className="text-sm font-bold text-gray-400">{match.p2_name}</div>
-              }
               {p2Active && <PokemonCard pokemon={p2Active} back={true} isActive />}
               {/* P2 bench */}
               {displayedBattle.p2_pokemon.filter(p => !p.active).length > 0 && (
