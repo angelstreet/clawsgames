@@ -128,10 +128,33 @@ router.get('/:matchId', (req, res) => {
   if (!match) { res.status(404).json({ error: 'Match not found' }); return; }
 
   const engine = getEngine(match.game_id);
-  res.json({
+  const response: any = {
     ...match,
     board_display: engine?.formatBoard(match.board_state),
-  });
+  };
+
+  // For Pokemon games, also include battle_view
+  if (match.game_id === 'pokemon' && match.board_state && match.board_state !== '{}') {
+    try {
+      const battleState = JSON.parse(match.board_state);
+      if (battleState.p1_pokemon) {
+        // Build a simple battle view from saved state
+        const formatPokemonView = (pokemons: any[]) => {
+          if (!pokemons || pokemons.length === 0) return '';
+          const active = pokemons.find((p: any) => p.active);
+          if (!active) return '';
+          const name = active.details?.split(',')[0]?.trim() || 'Unknown';
+          const hp = active.condition?.split('/')[0] || '?';
+          return `Active: ${name}, L${active.level || '?'}, M [${hp}/${active.stats?.hp || '?'}]`;
+        };
+        response.battle_view = formatPokemonView(battleState.p1_pokemon);
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+  }
+
+  res.json(response);
 });
 
 // Submit move
