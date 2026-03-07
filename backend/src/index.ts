@@ -16,15 +16,47 @@ import soloRouter from './routes/solo.js';
 import pokemonRouter from './routes/pokemon.js';
 import db from './db/index.js';
 
-// Cleanup stale matches (active >1 hour = timeout)
+// Cleanup stale matches (active >1 hour)
+// For pokemon matches with moves, pick the HP winner; otherwise mark as timeout with no winner
 function cleanupStaleMatches() {
-  const result = db.prepare(`
-    UPDATE matches 
-    SET status = 'completed', result = 'timeout', finished_at = datetime('now')
+  const stale = db.prepare(`
+    SELECT id, game_id, player1_id, player2_id FROM matches
     WHERE status = 'active' AND started_at < datetime('now', '-1 hour')
-  `).run();
-  if (result.changes > 0) {
-    console.log(`🧹 Cleaned up ${result.changes} stale matches`);
+  `).all() as any[];
+
+  for (const match of stale) {
+    if (match.game_id === 'pokemon') {
+      // Try to pick winner from last recorded board_state HP
+      const lastMove = db.prepare(
+        "SELECT board_state FROM moves WHERE match_id = ? AND board_state IS NOT NULL ORDER BY id DESC LIMIT 1"
+      ).get(match.id) as any;
+      let winnerId: number | null = null;
+      let matchResult = 'timeout';
+      if (lastMove?.board_state) {
+        try {
+          const state = JSON.parse(lastMove.board_state);
+          const p1Hp = (state.p1_pokemon || []).reduce((s: number, p: any) => {
+            const m = String(p.condition || p.hp || '').match(/(\d+)\/(\d+)/);
+            return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0);
+          }, 0);
+          const p2Hp = (state.p2_pokemon || []).reduce((s: number, p: any) => {
+            const m = String(p.condition || p.hp || '').match(/(\d+)\/(\d+)/);
+            return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0);
+          }, 0);
+          if (p1Hp > p2Hp) { winnerId = match.player1_id; matchResult = 'player1_win'; }
+          else if (p2Hp > p1Hp) { winnerId = match.player2_id; matchResult = 'player2_win'; }
+        } catch {}
+      }
+      db.prepare(`UPDATE matches SET status = 'completed', winner_id = ?, result = ?, finished_at = datetime('now') WHERE id = ?`)
+        .run(winnerId, matchResult, match.id);
+    } else {
+      db.prepare(`UPDATE matches SET status = 'completed', result = 'timeout', finished_at = datetime('now') WHERE id = ?`)
+        .run(match.id);
+    }
+  }
+
+  if (stale.length > 0) {
+    console.log(`🧹 Cleaned up ${stale.length} stale matches`);
   }
 }
 
