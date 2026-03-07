@@ -616,7 +616,7 @@ export default function PokemonBattle() {
         <div className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2">Battle Log</div>
         <div
           ref={logRef}
-          className={`${displayedBattle ? 'h-56' : 'h-[56vh] min-h-[16rem]'} overflow-y-auto font-mono text-xs space-y-2 text-gray-300`}
+          className="font-mono text-xs space-y-2 text-gray-300"
         >
           {turnLogs.length > 0 ? (
             turnLogs.map((t) => (
