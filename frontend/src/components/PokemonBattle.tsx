@@ -450,10 +450,9 @@ export default function PokemonBattle() {
         </div>
       )}
 
-      {/* Inline Replay Container — full bleed, breaks out of page padding */}
+      {/* Inline Replay Container — matches Battle Log section width */}
       {showReplay && (
-        <div ref={replayContainerRef} className="relative mb-4" style={{ margin: '0 -1.5rem 1rem', height: '420px', overflow: 'hidden' }}>
-          {/* Controls bar */}
+        <div ref={replayContainerRef} className="relative bg-gray-900 rounded-xl border border-gray-800 mb-4" style={{ height: '420px', overflow: 'hidden' }}>
           <div className="absolute top-2 right-2 z-10 flex gap-2">
             <button
               onClick={() => {
@@ -463,15 +462,14 @@ export default function PokemonBattle() {
                 if (BS) { BS.setVolume(next ? 0 : 50); BS.soundEnabled = !next; }
               }}
               className="bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 transition-colors"
-              title={isMuted ? 'Unmute' : 'Mute'}
             >
-              {isMuted ? '🔇 Unmute' : '🔊 Mute'}
+              {isMuted ? 'Unmute' : 'Mute'}
             </button>
             <button
               onClick={handleToggleReplay}
               className="bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 transition-colors"
             >
-              ▼ Hide
+              Close
             </button>
           </div>
           <div id="inline-battle-frame" className="battle" style={{ width: '100%', height: '100%' }} />
