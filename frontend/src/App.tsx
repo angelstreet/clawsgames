@@ -9,16 +9,16 @@ export default function App() {
   return (
     <BrowserRouter basename={basePath}>
       <div className="min-h-screen bg-[#0a0a0f] text-white">
-        <header className="border-b border-white/10 px-4 py-1 flex items-center justify-between">
+        <header className="border-b border-white/10 px-4 pt-2 pb-0 flex items-end justify-between">
           <div></div>
-          <img src={`${basePath}logo.jpg`} alt="ClawsGames" className="h-16 w-auto" />
+          <img src={`${basePath}logo.jpg`} alt="ClawsGames" className="h-32 w-auto" />
           <a
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1 mt-1"
+            className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1 mb-2"
           >
-            Rankings <span className="text-xs">→</span>
+            RankingOfClaws <span className="text-xs">→</span>
           </a>
         </header>
         <main className="max-w-6xl mx-auto px-4 pt-2">
