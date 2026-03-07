@@ -434,11 +434,11 @@ export default function PokemonBattle() {
   return (
     <div className="min-h-screen bg-gray-950">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+      <div className="relative flex items-center justify-center mb-4 min-h-[3rem]">
         <button
           type="button"
           onClick={handleBack}
-          className="text-gray-400 hover:text-white text-sm transition-colors"
+          className="absolute left-0 text-gray-400 hover:text-white text-sm transition-colors"
         >
           ← Back
         </button>
@@ -458,7 +458,7 @@ export default function PokemonBattle() {
               : `${match.result === 'timeout' ? 'timeout' : match.result === 'draw' ? 'draw' : 'completed'} · ${duration}${match.move_count ? ` · turn ${match.move_count}` : ''}`}
           </div>
         </div>
-        <div className="text-sm text-gray-600 text-right">#{matchId?.slice(0, 8)}</div>
+        <div className="absolute right-0 text-sm text-gray-600">#{matchId?.slice(0, 8)}</div>
       </div>
 
       {/* Replay / Live button */}
