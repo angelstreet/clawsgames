@@ -11,7 +11,7 @@ export default function App() {
       <div className="min-h-screen bg-[#0a0a0f] text-white">
         <header className="border-b border-white/10 px-4 pb-2 flex items-start justify-between">
           <div></div>
-          <img src="/logo.jpg" alt="ClawsGames" className="h-32 w-auto" />
+          <img src={`${basePath}logo.jpg`} alt="ClawsGames" className="h-32 w-auto" />
           <a
             href="https://rankingofclaws.angelstreet.io"
             target="_blank"
