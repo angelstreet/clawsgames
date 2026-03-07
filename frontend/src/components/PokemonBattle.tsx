@@ -238,9 +238,12 @@ export default function PokemonBattle() {
   const [loading, setLoading] = useState(true);
   const [showReplay, setShowReplay] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [liveLogEmpty, setLiveLogEmpty] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const battleInstanceRef = useRef<any>(null);
   const replayContainerRef = useRef<HTMLDivElement>(null);
+  const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastLogRef = useRef<string>('');
 
   const handleBack = () => {
     const idx = window.history.state?.idx ?? 0;
