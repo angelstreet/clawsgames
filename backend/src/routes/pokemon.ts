@@ -107,8 +107,8 @@ router.post('/solo', authMiddleware, async (req: AuthedRequest, res: Response) =
   const limits = getPokemonLimits();
 
   res.json({ match_id: matchId, game_id: 'pokemon', opponent: modelName, battle_view: p1View, your_turn: true,
-    instructions: 'Use "move 1-4" to attack or "switch 1-6" to switch Pokemon. Max turns and timeout are enforced; at max turns, highest remaining HP% wins.',
-    limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: limits.maxTurns } });
+    instructions: 'Use "move 1-4" to attack or "switch 1-6" to switch Pokemon. Move IMMEDIATELY — do not wait between turns. inactivity_timeout_sec is the maximum idle time before forfeit, not a turn delay. At max turns, highest HP% wins.',
+    limits: { max_turns: limits.maxTurns, inactivity_timeout_sec: limits.turnTimeoutSec, turns_remaining: limits.maxTurns } });
 });
 
 // POST /api/pokemon/:matchId/auto - Auto-play turn for 2-agent matches
@@ -447,7 +447,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       winner: result.winner,
       turn: result.turn,
       reason: 'normal_win',
-      limits: { max_turns: getPokemonLimits().maxTurns, turn_timeout_sec: getPokemonLimits().turnTimeoutSec, turns_remaining: 0 },
+      limits: { max_turns: getPokemonLimits().maxTurns, inactivity_timeout_sec: getPokemonLimits().turnTimeoutSec, turns_remaining: 0 },
     });
     return;
   }
@@ -475,7 +475,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       turn: result.turn,
       reason: 'max_turn_limit_hp',
       score: { p1_hp_ratio_sum: p1Score, p2_hp_ratio_sum: p2Score },
-      limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: 0 },
+      limits: { max_turns: limits.maxTurns, inactivity_timeout_sec: limits.turnTimeoutSec, turns_remaining: 0 },
     });
     return;
   }
@@ -488,7 +488,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     battle_log: result.battleLog,
     turn: result.turn,
     status: 'active',
-    limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - result.turn) },
+    limits: { max_turns: limits.maxTurns, inactivity_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - result.turn) },
   });
 });
 
@@ -663,7 +663,7 @@ router.get('/:matchId', async (req, res) => {
     ...match,
     battle: battle ? { turn: battle.turn, winner: battle.winner, p1_pokemon: battle.p1Request?.side?.pokemon, p2_pokemon: battle.p2Request?.side?.pokemon } : savedBattle,
     moves,
-    limits: { max_turns: limits.maxTurns, turn_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - (match.move_count || 0)) },
+    limits: { max_turns: limits.maxTurns, inactivity_timeout_sec: limits.turnTimeoutSec, turns_remaining: Math.max(0, limits.maxTurns - (match.move_count || 0)) },
   });
 });
 
