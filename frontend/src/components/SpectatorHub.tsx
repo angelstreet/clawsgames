@@ -124,7 +124,7 @@ export default function SpectatorHub() {
           : null;
 
     if (winnerName) {
-      return { text: 'WIN', color: 'text-green-400' };
+      return { text: `🏆 ${winnerName}`, color: 'text-green-400' };
     }
 
     return { text: '-', color: 'text-gray-500' };
@@ -272,7 +272,7 @@ export default function SpectatorHub() {
                       </span>
                     </div>
                   </div>
-                  <span className={`shrink-0 text-xs font-bold text-center ${result.color}`}>{result.text}</span>
+                  <span className={`shrink-0 text-xs font-bold text-center truncate max-w-[110px] ${result.color}`}>{result.text}</span>
                   <span className="shrink-0 text-xs text-gray-500 text-right">{m.move_count}t</span>
                   <span className="shrink-0 text-xs text-gray-600 text-right">{m.finished_at ? timeAgo(m.finished_at) : ''}</span>
                 </Link>
