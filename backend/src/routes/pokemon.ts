@@ -378,14 +378,27 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   const battle = getBattleState(req.params.matchId as string as string);
   if (!battle) { res.status(500).json({ error: 'Battle expired from memory' }); return; }
 
-  const playerMove = req.body.move;
-
-  // Check if player needs to force switch
   const p1ForceSwitch = battle.p1Request?.forceSwitch?.[0];
   const p2ForceSwitch = battle.p2Request?.forceSwitch?.[0];
-  if (p1ForceSwitch && !/^switch [1-6]$/i.test(String(playerMove || '').trim())) {
-    res.status(400).json({ error: 'Your active Pokemon fainted. You must play a switch command (example: "switch 2").' });
-    return;
+
+  // Auto-switch if agent sends a move command when force-switch is required
+  let p1Move = String(req.body.move || '').trim();
+  if (p1ForceSwitch && !/^switch [1-6]$/i.test(p1Move)) {
+    const alive = (battle.p1Request?.side?.pokemon || [])
+      .map((p: any, i: number) => ({ ...p, slot: i + 1 }))
+      .filter((p: any) => !p.active && p.condition !== '0 fnt');
+    p1Move = alive.length > 0 ? `switch ${alive[0].slot}` : 'switch 2';
+  }
+
+  // Auto-fix disabled/exhausted move: if agent picks a disabled move, use first valid one
+  if (/^move [1-4]$/i.test(p1Move) && !p1ForceSwitch) {
+    const moves = battle.p1Request?.active?.[0]?.moves || [];
+    const slotIdx = parseInt(p1Move.split(' ')[1]) - 1;
+    const requested = moves[slotIdx];
+    if (requested && (requested.disabled || requested.pp === 0)) {
+      const validIdx = moves.findIndex((m: any) => !m.disabled && m.pp > 0);
+      if (validIdx >= 0) p1Move = `move ${validIdx + 1}`;
+    }
   }
 
   // Get AI move
@@ -413,7 +426,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   }
 
   // Play the turn (both moves at once)
-  const result = await playTurn(req.params.matchId as string as string, playerMove, aiCommand);
+  const result = await playTurn(req.params.matchId as string as string, p1Move, aiCommand);
   if (!result.valid) { res.status(400).json({ error: result.error }); return; }
 
   // Get battle initialization from memory
@@ -422,10 +435,10 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   if (rawLog && rawLog.length > 0) {
     initLog = rawLog.join('\n') + '\n';
   }
-  
+
   // Record moves with battle log and raw battle log (prepend initialization)
   db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state, raw_battle_log) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(req.params.matchId as string as string, match.player1_id, result.turn, playerMove, result.battleLog || '', initLog + (result.rawBattleLog || ''));
+    .run(req.params.matchId as string as string, match.player1_id, result.turn, p1Move, result.battleLog || '', initLog + (result.rawBattleLog || ''));
   db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state, raw_battle_log) VALUES (?, ?, ?, ?, ?, ?)')
     .run(req.params.matchId as string as string, match.player2_id, result.turn, aiCommand, '', initLog + (result.rawBattleLog || ''));
 
@@ -439,7 +452,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     saveFinalBattleState(req.params.matchId as string);
     destroyBattle(req.params.matchId as string as string);
     res.json({
-      your_move: playerMove,
+      your_move: p1Move,
       ai_move: aiCommand,
       battle_log: result.battleLog,
       status: 'completed',
@@ -466,7 +479,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
     saveFinalBattleState(req.params.matchId as string);
     destroyBattle(req.params.matchId as string as string);
     res.json({
-      your_move: playerMove,
+      your_move: p1Move,
       ai_move: aiCommand,
       battle_log: result.battleLog,
       status: 'completed',
@@ -482,7 +495,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
 
   db.prepare('UPDATE matches SET move_count = ?, current_turn = ? WHERE id = ?').run(result.turn, result.turn, req.params.matchId as string);
   res.json({
-    your_move: playerMove,
+    your_move: p1Move,
     ai_move: aiCommand,
     battle_view: result.p1View,
     battle_log: result.battleLog,

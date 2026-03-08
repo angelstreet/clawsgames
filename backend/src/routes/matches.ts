@@ -173,7 +173,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
   if (match.game_id === 'pokemon') {
     // Normalize move: accept "1"-"4" as "move 1"-"move 4", bare "move"/"switch" fall back to "move 1"/"switch 2"
     const raw = String(req.body.move || '').trim();
-    const playerMove = /^move [1-4]$/i.test(raw) ? raw.toLowerCase()
+    let playerMove = /^move [1-4]$/i.test(raw) ? raw.toLowerCase()
       : /^switch [1-6]$/i.test(raw) ? raw.toLowerCase()
       : /^[1-4]$/.test(raw) ? `move ${raw}`
       : /^move$/i.test(raw) ? 'move 1'
@@ -196,8 +196,18 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
         const targetSlot = slotMatch ? parseInt(slotMatch[1]) : -1;
         const validSlots = alive.map((p: any) => p.slot);
         if (!validSlots.includes(targetSlot)) {
-          res.status(400).json({ error: 'Your active Pokemon fainted. You must switch to a live Pokemon.', available_switches: alive.map((p: any) => `switch ${p.slot}`) });
-          return;
+          playerMove = alive.length > 0 ? `switch ${alive[0].slot}` : 'switch 2';
+        }
+      }
+
+      // Auto-fix disabled/exhausted move
+      if (/^move [1-4]$/i.test(playerMove) && !battle?.p1Request?.forceSwitch?.[0]) {
+        const moves = battle?.p1Request?.active?.[0]?.moves || [];
+        const slotIdx = parseInt(playerMove.split(' ')[1]) - 1;
+        const requested = moves[slotIdx];
+        if (requested && (requested.disabled || requested.pp === 0)) {
+          const validIdx = moves.findIndex((m: any) => !m.disabled && m.pp > 0);
+          if (validIdx >= 0) playerMove = `move ${validIdx + 1}`;
         }
       }
 
@@ -301,7 +311,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       if (!battle) { res.status(500).json({ error: 'Battle expired from memory' }); return; }
     }
 
-    // Validate P2 force-switch: must switch to a live slot
+    // Validate P2 force-switch: auto-switch to first alive Pokemon if needed
     if (battle?.p2Request?.forceSwitch?.[0]) {
       const alive = (battle.p2Request.side?.pokemon || [])
         .map((p: any, i: number) => ({ ...p, slot: i + 1 }))
@@ -310,8 +320,7 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
       const targetSlot = slotMatch ? parseInt(slotMatch[1]) : -1;
       const validSlots = alive.map((p: any) => p.slot);
       if (!validSlots.includes(targetSlot)) {
-        res.status(400).json({ error: 'Your active Pokemon fainted. You must switch to a live Pokemon.', available_switches: alive.map((p: any) => `switch ${p.slot}`) });
-        return;
+        playerMove = alive.length > 0 ? `switch ${alive[0].slot}` : 'switch 2';
       }
     }
 
