@@ -4,6 +4,7 @@ import db from '../db/index.js';
 import { authMiddleware, AuthedRequest } from '../middleware/auth.js';
 import { getEngine } from '../engines/index.js';
 import { calculateElo } from '../services/elo.js';
+import { getAIMove } from '../services/ai-opponent.js';
 import { createBattle, playTurn, getBattleState, getRawBattleLog, destroyBattle, formatView } from '../engines/pokemon.js';
 import type { Response } from 'express';
 
@@ -182,7 +183,11 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
 
     if (playerNum === 1) {
       // Validate force-switch: if P1's pokemon fainted they must switch to a live slot
-      const battle = getBattleState(match.id);
+      let battle = getBattleState(match.id);
+      if (!battle) {
+        try { await createBattle(match.id); battle = getBattleState(match.id); } catch {}
+        if (!battle) { res.status(500).json({ error: 'Battle expired from memory' }); return; }
+      }
       if (battle?.p1Request?.forceSwitch?.[0]) {
         const alive = (battle.p1Request.side?.pokemon || [])
           .map((p: any, i: number) => ({ ...p, slot: i + 1 }))
@@ -195,13 +200,91 @@ router.post('/:matchId/move', authMiddleware, async (req: AuthedRequest, res: Re
           return;
         }
       }
-      // P1 stores their move; P2 will trigger the actual battle turn
+
+      // P1 stores their move; then trigger AI and process both moves inline
       db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state) VALUES (?, ?, ?, ?, ?)')
         .run(match.id, agentId, moveNumber, playerMove, '{}');
-      db.prepare('UPDATE matches SET move_count = ?, current_turn = 2 WHERE id = ?').run(moveNumber, match.id);
-      const b = getBattleState(match.id);
-      res.json({ valid: true, status: 'active', current_turn: 2, message: 'Move recorded, waiting for opponent',
-        battle_view: b ? formatView(b.p1Request) : undefined });
+
+      // Get AI move (P2)
+      let aiCommand: string;
+      if (battle?.p2Request?.forceSwitch?.[0]) {
+        const alive = (battle.p2Request.side?.pokemon || [])
+          .map((p: any, i: number) => ({ ...p, slot: i + 1 }))
+          .filter((p: any) => !p.active && p.condition !== '0 fnt');
+        aiCommand = `switch ${alive[Math.floor(Math.random() * alive.length)]?.slot || 2}`;
+      } else {
+        const aiView = formatView(battle?.p2Request);
+        const aiResult = await getAIMove('pokemon', aiView, '', 2, []);
+        const mv = aiResult.move.toLowerCase().trim();
+        if (/^move [1-4]$/.test(mv) || /^switch [1-6]$/.test(mv)) {
+          aiCommand = mv;
+        } else if (/^[1-4]$/.test(mv)) {
+          aiCommand = `move ${mv}`;
+        } else {
+          const moves = battle?.p2Request?.active?.[0]?.moves;
+          const idx = moves?.findIndex((m: any) => m.move.toLowerCase().includes(mv) && !m.disabled);
+          aiCommand = idx >= 0 ? `move ${idx + 1}` : `move ${(moves?.findIndex((m: any) => !m.disabled) ?? 0) + 1}`;
+        }
+      }
+
+      // Play the turn with both moves
+      let result = await playTurn(match.id, playerMove, aiCommand);
+      if (!result.valid) { res.status(400).json({ error: result.error }); return; }
+
+      const rawLog = getRawBattleLog(match.id);
+      const initLog = rawLog && rawLog.length > 0 ? rawLog.join('\n') + '\n' : '';
+      const combinedLog = initLog + (result.rawBattleLog || '');
+
+      // Update P1's move with battle log
+      db.prepare('UPDATE moves SET board_state = ?, raw_battle_log = ? WHERE match_id = ? AND agent_id = ? AND move_number = ?')
+        .run(result.battleLog || '', combinedLog, match.id, agentId, moveNumber);
+      // Insert AI's move
+      db.prepare('INSERT INTO moves (match_id, agent_id, move_number, move_data, board_state, raw_battle_log) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(match.id, match.player2_id, moveNumber + 1, aiCommand, '', combinedLog);
+
+      // Check for winner
+      if (result.winner) {
+        const winnerId = result.winner === 'Player 1' ? match.player1_id : match.player2_id;
+        const matchResult = result.winner === 'tie' ? 'draw' : (result.winner === 'Player 1' ? 'player1_win' : 'player2_win');
+        db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`)
+          .run(winnerId, matchResult, moveNumber, match.id);
+
+        // Save final battle state
+        const finalBattle = getBattleState(match.id);
+        if (finalBattle) {
+          const finalState = JSON.stringify({ turn: finalBattle.turn, winner: finalBattle.winner, p1_pokemon: finalBattle.p1Request?.side?.pokemon, p2_pokemon: finalBattle.p2Request?.side?.pokemon });
+          db.prepare('UPDATE matches SET board_state=? WHERE id=?').run(finalState, match.id);
+        }
+        destroyBattle(match.id);
+        res.json({ valid: true, status: 'completed', result: matchResult, winner: result.winner, turn: result.turn,
+          your_move: playerMove, ai_move: aiCommand, battle_log: result.battleLog });
+        return;
+      }
+
+      // Check max turns
+      const game = db.prepare('SELECT max_turns FROM games WHERE id = ?').get('pokemon') as any;
+      const maxTurns = game?.max_turns || 50;
+      const roundsPlayed = Math.floor(moveNumber / 2);
+      if (roundsPlayed >= maxTurns) {
+        const cur = getBattleState(match.id);
+        const p1Hp = (cur?.p1Request?.side?.pokemon || []).reduce((s: number, p: any) => { const m = String(p.condition || '').match(/(\d+)\/(\d+)/); return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0); }, 0);
+        const p2Hp = (cur?.p2Request?.side?.pokemon || []).reduce((s: number, p: any) => { const m = String(p.condition || '').match(/(\d+)\/(\d+)/); return s + (m ? parseInt(m[1]) / parseInt(m[2]) : 0); }, 0);
+        const winnerId = p1Hp > p2Hp ? match.player1_id : p2Hp > p1Hp ? match.player2_id : null;
+        const matchResult = winnerId === match.player1_id ? 'player1_win' : winnerId === match.player2_id ? 'player2_win' : 'draw';
+        db.prepare(`UPDATE matches SET status='completed', winner_id=?, result=?, move_count=?, finished_at=CURRENT_TIMESTAMP WHERE id=?`).run(winnerId, matchResult, moveNumber, match.id);
+        destroyBattle(match.id);
+        res.json({ valid: true, status: 'completed', result: matchResult, winner: winnerId === match.player1_id ? 'Player 1' : 'Player 2', turn: result.turn,
+          your_move: playerMove, ai_move: aiCommand, battle_log: result.battleLog, reason: 'max_turn_limit_hp' });
+        return;
+      }
+
+      // Game continues - update match state
+      const cur = getBattleState(match.id);
+      const boardState = cur ? JSON.stringify({ turn: result.turn, p1_pokemon: cur.p1Request?.side?.pokemon, p2_pokemon: cur.p2Request?.side?.pokemon }) : '{}';
+      db.prepare('UPDATE matches SET move_count=?, current_turn=1, board_state=? WHERE id=?').run(moveNumber, boardState, match.id);
+      res.json({ valid: true, status: 'active', current_turn: 1, turn: result.turn,
+        your_move: playerMove, ai_move: aiCommand, battle_view: result.p1View, battle_log: result.battleLog,
+        turns_remaining: Math.max(0, maxTurns - roundsPlayed) });
       return;
     }
 
