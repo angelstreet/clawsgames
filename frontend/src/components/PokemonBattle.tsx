@@ -377,14 +377,22 @@ export default function PokemonBattle() {
         byTurn.set(move.move_number, { turn: move.move_number, events: [] });
       }
       const t = byTurn.get(move.move_number)!;
-      if (move.agent_id === safeP1Id) t.playerMove = move.move_data;
-      if (move.agent_id === safeP2Id) t.aiMove = move.move_data;
+      const humanMove = (raw: string) => {
+        if (/^move [1-4]$/i.test(raw)) return `Move ${raw.split(' ')[1]}`;
+        if (/^[1-4]$/.test(raw)) return `Move ${raw}`;
+        if (/^switch [1-6]$/i.test(raw)) return `Switch ${raw.split(' ')[1]}`;
+        return raw;
+      };
+      if (move.agent_id === safeP1Id) t.playerMove = humanMove(move.move_data);
+      if (move.agent_id === safeP2Id) t.aiMove = humanMove(move.move_data);
 
       const rawLines = String(move.board_state || '')
         .split('\n')
         .map(l => l.trim())
         .filter(Boolean)
-        .filter(l => !/^turn\s+\d+$/i.test(l));
+        .filter(l => !/^turn\s+\d+$/i.test(l))
+        .filter(l => !/^\{/.test(l));  // skip JSON artifacts (board_state stored as {})
+
 
       for (const line of rawLines) {
         const event = readableEvent(line, safeP1Name, safeP2Name);
